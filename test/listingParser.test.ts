@@ -18,6 +18,20 @@ test("parseListingFromText extracts listing details from natural text", () => {
   assert.deepEqual(result.missing_fields, []);
 });
 
+test("parseListingFromText returns structured assumption guidance", () => {
+  const result = parseListingFromText(
+    "Turnkey beach condo at 456 Ocean Dr, Destin, FL 32541 listed for $615,000. 3 beds, 2 baths, 1,450 sqft. HOA $975/month. Property taxes $5,800/year. Renovated condo with strong short-term rental history.",
+  );
+
+  assert.deepEqual(result.assumption_guidance.property_fields.missing, []);
+  assert.ok(result.assumption_guidance.property_fields.known.includes("price"));
+  assert.ok(result.assumption_guidance.assumption_fields.required.includes("nightly_rate"));
+  assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.management_rate, 0.2);
+  assert.ok(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate > 0);
+  assert.ok(result.assumption_guidance.llm_prompt.follow_up_questions.length > 0);
+  assert.equal(result.assumption_guidance.llm_prompt.fields_to_confirm[0]?.field, "nightly_rate");
+});
+
 test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () => {
   const html = `
     <html>
@@ -58,4 +72,5 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.sqft, 1800);
   assert.equal(result.property_type, "house");
   assert.deepEqual(result.missing_fields, ["hoa_monthly", "tax_annual"]);
+  assert.ok(result.assumption_guidance.property_fields.missing.includes("hoa_monthly"));
 });
