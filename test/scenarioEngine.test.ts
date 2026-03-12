@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { calculateRoi } from "../src/services/roiCalculator.js";
+import { JsonAnalysisStore } from "../src/services/analysisStore.js";
 import { ScenarioEngine } from "../src/services/scenarioEngine.js";
 import { InvestmentAssumptions } from "../src/models/assumptions.js";
 import { Property } from "../src/models/property.js";
@@ -31,19 +35,59 @@ const assumptions: InvestmentAssumptions = {
   closingCostPercent: 0.03,
 };
 
-test("ScenarioEngine treats 'drops to 50%' as absolute occupancy", () => {
-  const engine = new ScenarioEngine();
+function createTestEngine() {
+  const dir = mkdtempSync(join(tmpdir(), "vacation-roi-agent-"));
+  const storePath = join(dir, "analyses.json");
+  const store = new JsonAnalysisStore(storePath);
+  return {
+    dir,
+    storePath,
+    engine: new ScenarioEngine(store),
+  };
+}
+
+test("ScenarioEngine generates stable analysis IDs for the same inputs", () => {
+  const { engine } = createTestEngine();
+  const analysis = calculateRoi(property, assumptions);
+
+  const first = engine.save(property, assumptions, analysis);
+  const second = engine.save(property, assumptions, analysis);
+
+  assert.equal(first.id, second.id);
+});
+
+test("ScenarioEngine persists property, assumptions, and analysis results", () => {
+  const { engine, storePath } = createTestEngine();
   const analysis = calculateRoi(property, assumptions);
   const record = engine.save(property, assumptions, analysis);
 
-  const followup = engine.answerFollowup(record.id, "What if occupancy drops to 50%?");
+  const stored = JSON.parse(readFileSync(storePath, "utf8")) as Record<string, unknown>;
+  const persisted = stored[record.id] as {
+    property: Property;
+    assumptions: InvestmentAssumptions;
+    analysis: ReturnType<typeof calculateRoi>;
+  };
+
+  assert.equal(persisted.property.address, property.address);
+  assert.equal(persisted.assumptions.nightlyRate, assumptions.nightlyRate);
+  assert.equal(persisted.analysis.annual_cash_flow, analysis.annual_cash_flow);
+});
+
+test("ScenarioEngine can answer follow-ups from a fresh engine instance", () => {
+  const { storePath } = createTestEngine();
+  const firstEngine = new ScenarioEngine(new JsonAnalysisStore(storePath));
+  const analysis = calculateRoi(property, assumptions);
+  const record = firstEngine.save(property, assumptions, analysis);
+
+  const secondEngine = new ScenarioEngine(new JsonAnalysisStore(storePath));
+  const followup = secondEngine.answerFollowup(record.id, "What if occupancy drops to 50%?");
 
   assert.equal(followup.updated_assumptions.occupancyRate, 0.5);
   assert.match(followup.explanation, /50.0% occupancy/);
 });
 
 test("ScenarioEngine treats 'drops by 10%' as relative occupancy decline", () => {
-  const engine = new ScenarioEngine();
+  const { engine } = createTestEngine();
   const analysis = calculateRoi(property, assumptions);
   const record = engine.save(property, assumptions, analysis);
 
@@ -53,7 +97,7 @@ test("ScenarioEngine treats 'drops by 10%' as relative occupancy decline", () =>
 });
 
 test("ScenarioEngine updates nightly rate from dollar question", () => {
-  const engine = new ScenarioEngine();
+  const { engine } = createTestEngine();
   const analysis = calculateRoi(property, assumptions);
   const record = engine.save(property, assumptions, analysis);
 
