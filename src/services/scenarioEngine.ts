@@ -65,7 +65,7 @@ export class ScenarioEngine {
     const dollarValue = this.extractDollar(question);
 
     if (normalizedQuestion.includes("occupancy")) {
-      if (normalizedQuestion.includes("drop") && percentValue != null) {
+      if ((normalizedQuestion.includes("drop by") || normalizedQuestion.includes("drops by")) && percentValue != null) {
         const current = normalizeOccupancyRate(assumptions.occupancyRate);
         return { ...assumptions, occupancyRate: Math.max(0, current * (1 - percentValue)) };
       }
