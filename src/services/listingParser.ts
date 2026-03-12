@@ -1,7 +1,7 @@
 import { buildAssumptionGuidance } from "./assumptionPrompter.js";
-import { ExtractListingResult, PropertyType } from "../models/property.js";
+import { ExtractListingResult, ExtractionConfidence, PropertyType } from "../models/property.js";
 
-const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "missing_fields" | "assumption_guidance">> = [
+const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "site_domain" | "assumption_guidance">> = [
   "address",
   "price",
   "beds",
@@ -12,7 +12,7 @@ const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "m
   "property_type",
 ];
 
-type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "missing_fields" | "assumption_guidance">>;
+type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "site_domain" | "assumption_guidance">>;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -271,10 +271,42 @@ function mergeListingFields(primary: PartialListingFields, fallback: PartialList
   };
 }
 
-function buildResult(rawText: string, structuredFields: PartialListingFields = {}): ExtractListingResult {
+function computeConfidence(extractedFields: string[], source: "text" | "url_success" | "url_failed"): ExtractionConfidence {
+  if (source === "url_failed") {
+    return "low";
+  }
+
+  if (extractedFields.length >= 6) {
+    return "high";
+  }
+
+  if (extractedFields.length >= 3) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function extractSiteDomain(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildResult(
+  rawText: string,
+  structuredFields: PartialListingFields = {},
+  options: { siteDomain?: string | null; source?: "text" | "url_success" | "url_failed" } = {},
+): ExtractListingResult {
   const normalizedText = rawText.replace(/\s+/g, " ").trim();
   const heuristicFields = buildHeuristicFields(rawText);
   const mergedFields = mergeListingFields(structuredFields, heuristicFields);
+
+  const extractedFields = fieldNames.filter((field) => mergedFields[field] != null).map((field) => field as string);
+  const missingFields = fieldNames.filter((field) => mergedFields[field] == null).map((field) => field as string);
 
   const partialResult = {
     address: mergedFields.address ?? null,
@@ -286,10 +318,11 @@ function buildResult(rawText: string, structuredFields: PartialListingFields = {
     tax_annual: mergedFields.tax_annual ?? null,
     property_type: mergedFields.property_type ?? null,
     raw_listing_text: normalizedText,
-    missing_fields: [] as string[],
+    extracted_fields: extractedFields,
+    missing_fields: missingFields,
+    extraction_confidence: computeConfidence(extractedFields, options.source ?? "text"),
+    site_domain: options.siteDomain ?? null,
   };
-
-  partialResult.missing_fields = fieldNames.filter((field) => partialResult[field] == null);
 
   return {
     ...partialResult,
@@ -302,6 +335,8 @@ export function parseListingFromText(rawText: string): ExtractListingResult {
 }
 
 export async function parseListingFromUrl(url: string): Promise<ExtractListingResult> {
+  const siteDomain = extractSiteDomain(url);
+
   try {
     const response = await fetch(url, {
       headers: {
@@ -317,7 +352,7 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
     const html = await response.text();
     const text = htmlToText(html);
     const structuredFields = extractStructuredListingFields(html);
-    const parsed = buildResult(text, structuredFields);
+    const parsed = buildResult(text, structuredFields, { siteDomain, source: "url_success" });
 
     return {
       ...parsed,
@@ -325,22 +360,10 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown fetch error";
-    const partialResult = {
-      address: null,
-      price: null,
-      beds: null,
-      baths: null,
-      sqft: null,
-      hoa_monthly: null,
-      tax_annual: null,
-      property_type: null,
-      raw_listing_text: `Unable to fetch or parse ${url}. ${message}`,
-      missing_fields: [...fieldNames],
-    };
 
-    return {
-      ...partialResult,
-      assumption_guidance: buildAssumptionGuidance(partialResult),
-    };
+    return buildResult(`Unable to fetch or parse ${url}. ${message}`, {}, {
+      siteDomain,
+      source: "url_failed",
+    });
   }
 }

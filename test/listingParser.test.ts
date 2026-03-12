@@ -15,7 +15,19 @@ test("parseListingFromText extracts listing details from natural text", () => {
   assert.equal(result.hoa_monthly, 975);
   assert.equal(result.tax_annual, 5800);
   assert.equal(result.property_type, "condo");
+  assert.deepEqual(result.extracted_fields.sort(), [
+    "address",
+    "baths",
+    "beds",
+    "hoa_monthly",
+    "price",
+    "property_type",
+    "sqft",
+    "tax_annual",
+  ]);
   assert.deepEqual(result.missing_fields, []);
+  assert.equal(result.extraction_confidence, "high");
+  assert.equal(result.site_domain, null);
 });
 
 test("parseListingFromText returns structured assumption guidance", () => {
@@ -72,5 +84,17 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.sqft, 1800);
   assert.equal(result.property_type, "house");
   assert.deepEqual(result.missing_fields, ["hoa_monthly", "tax_annual"]);
+  assert.ok(result.extracted_fields.includes("address"));
+  assert.equal(result.extraction_confidence, "high");
+  assert.equal(result.site_domain, null);
   assert.ok(result.assumption_guidance.property_fields.missing.includes("hoa_monthly"));
+});
+
+test("parseListingFromUrl returns domain and low confidence on fetch failure", async () => {
+  const result = await parseListingFromUrl("https://example.com/nonexistent-listing");
+
+  assert.equal(result.site_domain, "example.com");
+  assert.equal(result.extraction_confidence, "low");
+  assert.deepEqual(result.extracted_fields, []);
+  assert.ok(result.missing_fields.includes("price"));
 });

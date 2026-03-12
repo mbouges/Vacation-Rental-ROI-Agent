@@ -1,4 +1,5 @@
 export type PropertyType = "condo" | "house" | "townhouse";
+export type ExtractionConfidence = "low" | "medium" | "high";
 
 export interface Property {
   address: string;
@@ -47,6 +48,9 @@ export interface ExtractListingResult {
   tax_annual: number | null;
   property_type: PropertyType | null;
   raw_listing_text: string;
+  extracted_fields: string[];
   missing_fields: string[];
+  extraction_confidence: ExtractionConfidence;
+  site_domain: string | null;
   assumption_guidance: AssumptionPromptGuidance;
 }
