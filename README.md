@@ -10,17 +10,20 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Validation: `zod`
 - Development runner: `tsx`
 - Testing: Node.js built-in test runner with `tsx`
+- Persistence: local JSON storage for saved analyses
 
 ## What is included
 
 - MCP server with `extract_listing`, `analyze_property`, and `answer_followup` tools
 - Deterministic ROI calculator implemented fully in TypeScript
+- Persistent analysis storage across sessions
 - Scenario engine for follow-up what-if analysis
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
 - URL extraction with HTML parsing and JSON-LD structured-data fallback
+- Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
-- Regression tests for ROI math, follow-up parsing, and listing extraction
+- Regression tests for ROI math, persistence, follow-up parsing, and listing extraction
 
 ## Project structure
 
@@ -28,6 +31,8 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - `src/tools/*`: MCP tool handlers
 - `src/services/roiCalculator.ts`: financial calculations
 - `src/services/analysisExplainer.ts`: plain-English analysis summaries
+- `src/services/analysisStore.ts`: persistent local JSON analysis storage
+- `src/services/assumptionPrompter.ts`: assumption guidance and suggested defaults
 - `src/services/listingParser.ts`: raw text and URL extraction helpers
 - `src/services/scenarioEngine.ts`: follow-up scenario handling
 - `src/models/*`: shared types
@@ -57,7 +62,17 @@ Example:
 }
 ```
 
-Returns extracted property details, original listing text, and `missing_fields` for anything not found.
+Returns:
+
+- extracted property details
+- original listing text
+- `missing_fields` for property fields not found
+- `assumption_guidance` with:
+  - `property_fields.known` and `property_fields.missing`
+  - `assumption_fields.required`, `missing`, and `suggested_defaults`
+  - `llm_prompt.summary`, `follow_up_questions`, and `fields_to_confirm`
+
+This lets the LLM clearly separate listing facts from investment assumptions before running analysis.
 
 ### `analyze_property`
 
@@ -104,7 +119,7 @@ Example:
 }
 ```
 
-Supports common occupancy, nightly-rate, and down-payment follow-up scenarios. Follow-ups require the same live server session unless persistence is added.
+Supports common occupancy, nightly-rate, and down-payment follow-up scenarios. Analyses are persisted locally, so follow-ups can now load prior records across sessions.
 
 ## Local scripts
 
@@ -131,14 +146,17 @@ npm test
 Current test coverage includes:
 
 - ROI calculator core metrics
+- persisted analysis storage and stable analysis IDs
+- follow-up loading from a fresh engine instance
 - follow-up parsing for absolute and relative occupancy changes
 - nightly-rate follow-up handling
 - natural-text listing extraction
 - JSON-LD URL extraction fallback
+- structured assumption guidance generation
 
 ## Notes
 
 - Financial calculations run in TypeScript, not prompt text.
 - `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup and anti-bot behavior.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
-- Analyses are currently stored in memory, so cross-session follow-ups are not persisted yet.
+- Analyses are now stored in local JSON so `answer_followup` can load previous analyses across sessions.

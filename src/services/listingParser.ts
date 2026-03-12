@@ -1,6 +1,7 @@
+import { buildAssumptionGuidance } from "./assumptionPrompter.js";
 import { ExtractListingResult, PropertyType } from "../models/property.js";
 
-const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "missing_fields">> = [
+const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "missing_fields" | "assumption_guidance">> = [
   "address",
   "price",
   "beds",
@@ -11,7 +12,7 @@ const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "m
   "property_type",
 ];
 
-type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "missing_fields">>;
+type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "missing_fields" | "assumption_guidance">>;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -275,7 +276,7 @@ function buildResult(rawText: string, structuredFields: PartialListingFields = {
   const heuristicFields = buildHeuristicFields(rawText);
   const mergedFields = mergeListingFields(structuredFields, heuristicFields);
 
-  const result: ExtractListingResult = {
+  const partialResult = {
     address: mergedFields.address ?? null,
     price: mergedFields.price ?? null,
     beds: mergedFields.beds ?? null,
@@ -285,11 +286,15 @@ function buildResult(rawText: string, structuredFields: PartialListingFields = {
     tax_annual: mergedFields.tax_annual ?? null,
     property_type: mergedFields.property_type ?? null,
     raw_listing_text: normalizedText,
-    missing_fields: [],
+    missing_fields: [] as string[],
   };
 
-  result.missing_fields = fieldNames.filter((field) => result[field] == null);
-  return result;
+  partialResult.missing_fields = fieldNames.filter((field) => partialResult[field] == null);
+
+  return {
+    ...partialResult,
+    assumption_guidance: buildAssumptionGuidance(partialResult),
+  };
 }
 
 export function parseListingFromText(rawText: string): ExtractListingResult {
@@ -320,8 +325,7 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown fetch error";
-
-    return {
+    const partialResult = {
       address: null,
       price: null,
       beds: null,
@@ -332,6 +336,11 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
       property_type: null,
       raw_listing_text: `Unable to fetch or parse ${url}. ${message}`,
       missing_fields: [...fieldNames],
+    };
+
+    return {
+      ...partialResult,
+      assumption_guidance: buildAssumptionGuidance(partialResult),
     };
   }
 }

@@ -13,6 +13,30 @@ export interface Property {
   listingUrl?: string;
 }
 
+export interface AssumptionPromptField {
+  field: string;
+  reason: string;
+  suggested_value: number;
+  question: string;
+}
+
+export interface AssumptionPromptGuidance {
+  property_fields: {
+    known: string[];
+    missing: string[];
+  };
+  assumption_fields: {
+    required: string[];
+    missing: string[];
+    suggested_defaults: Record<string, number>;
+  };
+  llm_prompt: {
+    summary: string;
+    follow_up_questions: string[];
+    fields_to_confirm: AssumptionPromptField[];
+  };
+}
+
 export interface ExtractListingResult {
   address: string | null;
   price: number | null;
@@ -24,4 +48,5 @@ export interface ExtractListingResult {
   property_type: PropertyType | null;
   raw_listing_text: string;
   missing_fields: string[];
+  assumption_guidance: AssumptionPromptGuidance;
 }
