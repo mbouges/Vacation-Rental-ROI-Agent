@@ -19,7 +19,7 @@ server.tool(
   "extract_listing",
   "Extract property details from a listing URL or optional raw listing text.",
   {
-    url: z.string().url(),
+    url: z.string().url().optional(),
     rawText: z.string().optional(),
   },
   async ({ url, rawText }) => ({
