@@ -21,6 +21,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
 - URL extraction with HTML parsing and JSON-LD structured-data fallback
+- Extraction diagnostics including `extracted_fields`, `missing_fields`, confidence, and site domain
 - Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
 - Regression tests for ROI math, persistence, follow-up parsing, and listing extraction
@@ -66,13 +67,16 @@ Returns:
 
 - extracted property details
 - original listing text
+- `extracted_fields` for property fields successfully found
 - `missing_fields` for property fields not found
+- `extraction_confidence` as `low`, `medium`, or `high`
+- `site_domain` when URL extraction is used
 - `assumption_guidance` with:
   - `property_fields.known` and `property_fields.missing`
   - `assumption_fields.required`, `missing`, and `suggested_defaults`
   - `llm_prompt.summary`, `follow_up_questions`, and `fields_to_confirm`
 
-This lets the LLM clearly separate listing facts from investment assumptions before running analysis.
+This lets the LLM clearly separate listing facts from investment assumptions before running analysis, while also understanding how complete and reliable the extraction appears to be.
 
 ### `analyze_property`
 
@@ -152,6 +156,7 @@ Current test coverage includes:
 - nightly-rate follow-up handling
 - natural-text listing extraction
 - JSON-LD URL extraction fallback
+- extraction diagnostics for confidence, domain, and field completeness
 - structured assumption guidance generation
 
 ## Notes
