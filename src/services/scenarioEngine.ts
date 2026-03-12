@@ -1,14 +1,8 @@
 import { InvestmentAssumptions } from "../models/assumptions.js";
 import { Property } from "../models/property.js";
 import { buildAnalysisExplanation } from "./analysisExplainer.js";
+import { AnalysisRecord, JsonAnalysisStore, generateAnalysisId } from "./analysisStore.js";
 import { RoiAnalysis, calculateRoi, normalizeOccupancyRate, normalizePercent } from "./roiCalculator.js";
-
-export interface AnalysisRecord {
-  id: string;
-  property: Property;
-  assumptions: InvestmentAssumptions;
-  analysis: RoiAnalysis;
-}
 
 export interface FollowupResponse {
   analysis_id: string;
@@ -21,19 +15,31 @@ export interface FollowupResponse {
 export class ScenarioEngine {
   private readonly analyses = new Map<string, AnalysisRecord>();
 
+  constructor(private readonly analysisStore: JsonAnalysisStore = new JsonAnalysisStore()) {}
+
   save(property: Property, assumptions: InvestmentAssumptions, analysis: RoiAnalysis): AnalysisRecord {
-    const id = `analysis_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const record = { id, property, assumptions, analysis };
+    const id = generateAnalysisId(property, assumptions);
+    const record = this.analysisStore.save({ id, property, assumptions, analysis });
     this.analyses.set(id, record);
     return record;
   }
 
   get(id: string): AnalysisRecord | undefined {
-    return this.analyses.get(id);
+    const cached = this.analyses.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    const stored = this.analysisStore.get(id);
+    if (stored) {
+      this.analyses.set(id, stored);
+    }
+
+    return stored;
   }
 
   answerFollowup(analysisId: string, question: string): FollowupResponse {
-    const record = this.analyses.get(analysisId);
+    const record = this.get(analysisId);
     if (!record) {
       throw new Error(`Unknown analysis_id: ${analysisId}`);
     }
@@ -41,11 +47,12 @@ export class ScenarioEngine {
     const updatedAssumptions = this.applyQuestionToAssumptions(record.assumptions, question);
     const analysis = calculateRoi(record.property, updatedAssumptions);
 
-    const updatedRecord = {
-      ...record,
+    const updatedRecord = this.analysisStore.save({
+      id: analysisId,
+      property: record.property,
       assumptions: updatedAssumptions,
       analysis,
-    };
+    });
     this.analyses.set(analysisId, updatedRecord);
 
     return {
