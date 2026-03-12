@@ -1,5 +1,6 @@
 import { InvestmentAssumptions } from "../models/assumptions.js";
 import { Property } from "../models/property.js";
+import { buildAnalysisExplanation } from "./analysisExplainer.js";
 import { RoiAnalysis, calculateRoi, normalizeOccupancyRate, normalizePercent } from "./roiCalculator.js";
 
 export interface AnalysisRecord {
@@ -52,7 +53,7 @@ export class ScenarioEngine {
       question,
       updated_assumptions: updatedAssumptions,
       analysis,
-      explanation: this.buildExplanation(record.property.address, analysis),
+      explanation: buildAnalysisExplanation(record.property, updatedAssumptions, analysis),
     };
   }
 
@@ -98,16 +99,5 @@ export class ScenarioEngine {
     }
 
     return Number(match[1].replace(/,/g, ""));
-  }
-
-  private buildExplanation(address: string, analysis: RoiAnalysis): string {
-    const breakEvenPercent = (analysis.break_even_occupancy * 100).toFixed(1);
-    const cashFlow = analysis.annual_cash_flow.toLocaleString(undefined, {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    });
-
-    return `${address} now projects ${cashFlow} in annual cash flow, with break-even occupancy near ${breakEvenPercent}%.`;
   }
 }

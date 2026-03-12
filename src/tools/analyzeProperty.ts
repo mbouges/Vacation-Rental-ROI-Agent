@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AnalyzePropertyInput, InvestmentAssumptions } from "../models/assumptions.js";
 import { Property } from "../models/property.js";
+import { buildAnalysisExplanation } from "../services/analysisExplainer.js";
 import { RoiAnalysis, calculateRoi } from "../services/roiCalculator.js";
 import { ScenarioEngine } from "../services/scenarioEngine.js";
 
@@ -67,6 +68,7 @@ function toAssumptions(input: AnalyzePropertyInput["assumptions"]): InvestmentAs
 
 export interface AnalyzePropertyResponse extends RoiAnalysis {
   analysis_id: string;
+  explanation: string;
 }
 
 export function createAnalyzePropertyTool(scenarioEngine: ScenarioEngine) {
@@ -79,6 +81,7 @@ export function createAnalyzePropertyTool(scenarioEngine: ScenarioEngine) {
 
     return {
       analysis_id: record.id,
+      explanation: buildAnalysisExplanation(property, assumptions, analysis),
       ...analysis,
     };
   };
