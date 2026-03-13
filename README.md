@@ -2,6 +2,21 @@
 
 TypeScript MCP server for analyzing vacation-rental property ROI through MCP tools.
 
+## MVP status
+
+### Supported today
+
+- raw-text extraction
+- generic URL extraction
+- site-specific extraction for `beach-homes.com` and `condoinvestment.com`
+- persisted follow-up analysis
+
+### Known limitations
+
+- major portals may block automated fetches
+- extraction quality varies by site markup
+- manual confirmation may still be required for key property facts
+
 ## Tech stack
 
 - Language: TypeScript
@@ -51,6 +66,14 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 3. Run `npm run build`
 4. Run `npm test`
 5. Run `npm run dev`
+
+## Sample workflow
+
+1. Call `extract_listing` with pasted listing text or a URL.
+2. Inspect `assumption_guidance` to see known property fields, missing property fields, and suggested defaults.
+3. Collect any missing assumptions you want to confirm with the user.
+4. Call `analyze_property` with the property details and final assumptions.
+5. Use the returned `analysis_id` with `answer_followup` for what-if questions.
 
 ## Available tools
 
