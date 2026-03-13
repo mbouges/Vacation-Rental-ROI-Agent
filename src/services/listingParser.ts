@@ -1,7 +1,14 @@
 import { buildAssumptionGuidance } from "./assumptionPrompter.js";
-import { ExtractListingResult, ExtractionConfidence, PropertyType } from "../models/property.js";
+import {
+  ExtractListingResult,
+  ExtractionConfidence,
+  FetchStatus,
+  ManualEntryPrompt,
+  ParseStatus,
+  PropertyType,
+} from "../models/property.js";
 
-const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "site_domain" | "assumption_guidance">> = [
+const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "fetch_status" | "parse_status" | "site_domain" | "invalid_fields" | "assumption_guidance" | "manual_entry_prompt">> = [
   "address",
   "price",
   "beds",
@@ -12,9 +19,15 @@ const fieldNames: Array<keyof Omit<ExtractListingResult, "raw_listing_text" | "e
   "property_type",
 ];
 
-type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "site_domain" | "assumption_guidance">>;
+type PartialListingFields = Partial<Omit<ExtractListingResult, "raw_listing_text" | "extracted_fields" | "missing_fields" | "extraction_confidence" | "fetch_status" | "parse_status" | "site_domain" | "invalid_fields" | "assumption_guidance" | "manual_entry_prompt">>;
 
 type JsonRecord = Record<string, unknown>;
+
+type BuildResultOptions = {
+  siteDomain?: string | null;
+  fetchStatus?: FetchStatus;
+  source?: "text" | "url_success" | "url_failed";
+};
 
 function currencyToNumber(value: string): number {
   return Number(value.replace(/[^0-9.]/g, ""));
@@ -271,20 +284,98 @@ function mergeListingFields(primary: PartialListingFields, fallback: PartialList
   };
 }
 
-function computeConfidence(extractedFields: string[], source: "text" | "url_success" | "url_failed"): ExtractionConfidence {
-  if (source === "url_failed") {
+function isPollutedAddress(address: string | null): boolean {
+  if (!address) {
+    return false;
+  }
+
+  const normalized = address.toLowerCase();
+  const badPhrases = [
+    "terms of use",
+    "privacy policy",
+    "contact us",
+    "copyright",
+    "follow us",
+    "all information is deemed reliable",
+    "do not call",
+  ];
+
+  if (address.length > 120) {
+    return true;
+  }
+
+  return badPhrases.some((phrase) => normalized.includes(phrase));
+}
+
+function sanitizeFields(fields: PartialListingFields): { sanitized: PartialListingFields; invalidFields: string[] } {
+  const sanitized: PartialListingFields = { ...fields };
+  const invalidFields: string[] = [];
+
+  if (isPollutedAddress(sanitized.address ?? null)) {
+    sanitized.address = null;
+    invalidFields.push("address");
+  }
+
+  if (sanitized.sqft != null && sanitized.sqft <= 0) {
+    sanitized.sqft = null;
+    invalidFields.push("sqft");
+  }
+
+  if (
+    sanitized.tax_annual != null &&
+    sanitized.price != null &&
+    Math.abs(sanitized.tax_annual - sanitized.price) / Math.max(sanitized.price, 1) < 0.05
+  ) {
+    sanitized.tax_annual = null;
+    invalidFields.push("tax_annual");
+  }
+
+  return { sanitized, invalidFields };
+}
+
+function computeConfidence(params: {
+  extractedFields: string[];
+  invalidFields: string[];
+  fetchStatus: FetchStatus;
+  parseStatus: ParseStatus;
+}): ExtractionConfidence {
+  if (params.fetchStatus === "blocked" || params.fetchStatus === "error") {
     return "low";
   }
 
-  if (extractedFields.length >= 6) {
+  if (params.parseStatus === "failed" || params.parseStatus === "corrupt") {
+    return "low";
+  }
+
+  if (params.invalidFields.length > 0) {
+    return "low";
+  }
+
+  if (params.extractedFields.length >= 6) {
     return "high";
   }
 
-  if (extractedFields.length >= 3) {
+  if (params.extractedFields.length >= 3) {
     return "medium";
   }
 
   return "low";
+}
+
+function deriveParseStatus(extractedFields: string[], invalidFields: string[]): ParseStatus {
+  if (extractedFields.length === 0) {
+    return "failed";
+  }
+
+  if (invalidFields.length > 0) {
+    return extractedFields.length >= 2 ? "corrupt" : "failed";
+  }
+
+  if (extractedFields.length === fieldNames.length) {
+    return "success";
+  }
+
+  return "partial";
 }
 
 function extractSiteDomain(url: string): string | null {
@@ -296,42 +387,108 @@ function extractSiteDomain(url: string): string | null {
   }
 }
 
-function buildResult(
-  rawText: string,
-  structuredFields: PartialListingFields = {},
-  options: { siteDomain?: string | null; source?: "text" | "url_success" | "url_failed" } = {},
-): ExtractListingResult {
+function deriveFetchStatus(errorMessage: string): FetchStatus {
+  if (/403|429|forbidden|blocked/i.test(errorMessage)) {
+    return "blocked";
+  }
+
+  return "error";
+}
+
+function isExtractionUsable(result: {
+  extracted_fields: string[];
+  parse_status: ParseStatus;
+  fetch_status: FetchStatus;
+}): boolean {
+  if (result.fetch_status === "blocked" || result.fetch_status === "error") {
+    return false;
+  }
+
+  if (result.parse_status === "failed" || result.parse_status === "corrupt") {
+    return false;
+  }
+
+  return result.extracted_fields.length >= 2;
+}
+
+function buildManualEntryPrompt(result: {
+  fetch_status: FetchStatus;
+  parse_status: ParseStatus;
+  missing_fields: string[];
+  site_domain: string | null;
+}): ManualEntryPrompt | null {
+  if (isExtractionUsable({
+    extracted_fields: [],
+    parse_status: result.parse_status,
+    fetch_status: result.fetch_status,
+  }) && result.parse_status !== "failed") {
+    return null;
+  }
+
+  const reason =
+    result.fetch_status === "blocked"
+      ? `The source site${result.site_domain ? ` (${result.site_domain})` : ""} blocked automated extraction.`
+      : result.parse_status === "corrupt"
+        ? "The page was fetched, but the extracted values were not trustworthy enough to use directly."
+        : "The page did not produce enough reliable property details to continue automatically.";
+
+  return {
+    reason,
+    requested_property_fields: ["address", "price", "beds", "baths", "sqft", "property_type", "hoa_monthly", "tax_annual"],
+    suggested_user_prompt:
+      "Please paste the listing description or provide the address, asking price, beds, baths, sqft, property type, HOA, and annual taxes so I can continue the analysis.",
+    follow_up_questions: [
+      "What is the property address?",
+      "What is the asking price?",
+      "How many beds and baths does it have?",
+      "What is the square footage?",
+      "What is the property type?",
+      "If available, what are the monthly HOA dues and annual property taxes?",
+    ],
+  };
+}
+
+function buildResult(rawText: string, structuredFields: PartialListingFields = {}, options: BuildResultOptions = {}): ExtractListingResult {
   const normalizedText = rawText.replace(/\s+/g, " ").trim();
   const heuristicFields = buildHeuristicFields(rawText);
   const mergedFields = mergeListingFields(structuredFields, heuristicFields);
+  const { sanitized, invalidFields } = sanitizeFields(mergedFields);
 
-  const extractedFields = fieldNames.filter((field) => mergedFields[field] != null).map((field) => field as string);
-  const missingFields = fieldNames.filter((field) => mergedFields[field] == null).map((field) => field as string);
+  const extractedFields = fieldNames.filter((field) => sanitized[field] != null).map((field) => field as string);
+  const missingFields = fieldNames.filter((field) => sanitized[field] == null).map((field) => field as string);
+  const fetchStatus = options.fetchStatus ?? "not_applicable";
+  const parseStatus = deriveParseStatus(extractedFields, invalidFields);
 
   const partialResult = {
-    address: mergedFields.address ?? null,
-    price: mergedFields.price ?? null,
-    beds: mergedFields.beds ?? null,
-    baths: mergedFields.baths ?? null,
-    sqft: mergedFields.sqft ?? null,
-    hoa_monthly: mergedFields.hoa_monthly ?? null,
-    tax_annual: mergedFields.tax_annual ?? null,
-    property_type: mergedFields.property_type ?? null,
+    address: sanitized.address ?? null,
+    price: sanitized.price ?? null,
+    beds: sanitized.beds ?? null,
+    baths: sanitized.baths ?? null,
+    sqft: sanitized.sqft ?? null,
+    hoa_monthly: sanitized.hoa_monthly ?? null,
+    tax_annual: sanitized.tax_annual ?? null,
+    property_type: sanitized.property_type ?? null,
     raw_listing_text: normalizedText,
     extracted_fields: extractedFields,
     missing_fields: missingFields,
-    extraction_confidence: computeConfidence(extractedFields, options.source ?? "text"),
+    extraction_confidence: computeConfidence({ extractedFields, invalidFields, fetchStatus, parseStatus }),
+    fetch_status: fetchStatus,
+    parse_status: parseStatus,
     site_domain: options.siteDomain ?? null,
+    invalid_fields: invalidFields,
   };
+
+  const usable = isExtractionUsable(partialResult);
 
   return {
     ...partialResult,
-    assumption_guidance: buildAssumptionGuidance(partialResult),
+    assumption_guidance: buildAssumptionGuidance(partialResult, { allowSuggestedDefaults: usable }),
+    manual_entry_prompt: usable ? null : buildManualEntryPrompt(partialResult),
   };
 }
 
 export function parseListingFromText(rawText: string): ExtractListingResult {
-  return buildResult(rawText);
+  return buildResult(rawText, {}, { fetchStatus: "not_applicable" });
 }
 
 export async function parseListingFromUrl(url: string): Promise<ExtractListingResult> {
@@ -352,7 +509,7 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
     const html = await response.text();
     const text = htmlToText(html);
     const structuredFields = extractStructuredListingFields(html);
-    const parsed = buildResult(text, structuredFields, { siteDomain, source: "url_success" });
+    const parsed = buildResult(text, structuredFields, { siteDomain, fetchStatus: "success", source: "url_success" });
 
     return {
       ...parsed,
@@ -363,7 +520,11 @@ export async function parseListingFromUrl(url: string): Promise<ExtractListingRe
 
     return buildResult(`Unable to fetch or parse ${url}. ${message}`, {}, {
       siteDomain,
+      fetchStatus: deriveFetchStatus(message),
       source: "url_failed",
     });
   }
 }
+
+
+

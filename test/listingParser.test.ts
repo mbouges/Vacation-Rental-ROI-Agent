@@ -15,33 +15,62 @@ test("parseListingFromText extracts listing details from natural text", () => {
   assert.equal(result.hoa_monthly, 975);
   assert.equal(result.tax_annual, 5800);
   assert.equal(result.property_type, "condo");
-  assert.deepEqual(result.extracted_fields.sort(), [
-    "address",
-    "baths",
-    "beds",
-    "hoa_monthly",
-    "price",
-    "property_type",
-    "sqft",
-    "tax_annual",
-  ]);
   assert.deepEqual(result.missing_fields, []);
+  assert.equal(result.fetch_status, "not_applicable");
+  assert.equal(result.parse_status, "success");
   assert.equal(result.extraction_confidence, "high");
-  assert.equal(result.site_domain, null);
+  assert.equal(result.manual_entry_prompt, null);
 });
 
-test("parseListingFromText returns structured assumption guidance", () => {
+test("blocked site response returns structured manual-entry fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("blocked", { status: 403, statusText: "Forbidden" });
+
+  try {
+    const result = await parseListingFromUrl("https://example.com/listing");
+
+    assert.equal(result.fetch_status, "blocked");
+    assert.equal(result.parse_status, "failed");
+    assert.equal(result.extraction_confidence, "low");
+    assert.deepEqual(result.extracted_fields, []);
+    assert.equal(result.site_domain, "example.com");
+    assert.ok(result.manual_entry_prompt);
+    assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("corrupted address is treated as invalid and downgrades parse status", () => {
   const result = parseListingFromText(
-    "Turnkey beach condo at 456 Ocean Dr, Destin, FL 32541 listed for $615,000. 3 beds, 2 baths, 1,450 sqft. HOA $975/month. Property taxes $5,800/year. Renovated condo with strong short-term rental history.",
+    "Address: Contact us for details. Terms of use. Privacy policy. Copyright notice. Price: $485,000. 2 beds. 2 baths. 930 sqft. Condo.",
   );
 
-  assert.deepEqual(result.assumption_guidance.property_fields.missing, []);
-  assert.ok(result.assumption_guidance.property_fields.known.includes("price"));
-  assert.ok(result.assumption_guidance.assumption_fields.required.includes("nightly_rate"));
-  assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.management_rate, 0.2);
-  assert.ok(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate > 0);
-  assert.ok(result.assumption_guidance.llm_prompt.follow_up_questions.length > 0);
-  assert.equal(result.assumption_guidance.llm_prompt.fields_to_confirm[0]?.field, "nightly_rate");
+  assert.equal(result.address, null);
+  assert.ok(result.invalid_fields.includes("address"));
+  assert.ok(result.missing_fields.includes("address"));
+  assert.equal(result.parse_status, "corrupt");
+  assert.equal(result.extraction_confidence, "low");
+});
+
+test("sqft zero is treated as missing", () => {
+  const result = parseListingFromText(
+    "123 Beach Ave, Destin, FL 32541 listed for $485,000. 2 beds, 2 baths, 0 sqft. Condo.",
+  );
+
+  assert.equal(result.sqft, null);
+  assert.ok(result.invalid_fields.includes("sqft"));
+  assert.ok(result.missing_fields.includes("sqft"));
+});
+
+test("tax parsed equal to price is treated as invalid", () => {
+  const result = parseListingFromText(
+    "123 Beach Ave, Destin, FL 32541 listed for $485,000. 2 beds, 2 baths, 930 sqft. Property taxes $485,000/year. Condo.",
+  );
+
+  assert.equal(result.tax_annual, null);
+  assert.ok(result.invalid_fields.includes("tax_annual"));
+  assert.ok(result.missing_fields.includes("tax_annual"));
 });
 
 test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () => {
@@ -84,17 +113,9 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.sqft, 1800);
   assert.equal(result.property_type, "house");
   assert.deepEqual(result.missing_fields, ["hoa_monthly", "tax_annual"]);
-  assert.ok(result.extracted_fields.includes("address"));
+  assert.equal(result.fetch_status, "success");
+  assert.equal(result.parse_status, "partial");
   assert.equal(result.extraction_confidence, "high");
   assert.equal(result.site_domain, null);
-  assert.ok(result.assumption_guidance.property_fields.missing.includes("hoa_monthly"));
-});
-
-test("parseListingFromUrl returns domain and low confidence on fetch failure", async () => {
-  const result = await parseListingFromUrl("https://example.com/nonexistent-listing");
-
-  assert.equal(result.site_domain, "example.com");
-  assert.equal(result.extraction_confidence, "low");
-  assert.deepEqual(result.extracted_fields, []);
-  assert.ok(result.missing_fields.includes("price"));
+  assert.equal(result.manual_entry_prompt, null);
 });

@@ -95,8 +95,12 @@ function suggestUtilitiesAnnual(result: ListingSnapshot): number {
   return roundMoney(base + sqft * perSqft);
 }
 
-export function buildAssumptionGuidance(result: ListingSnapshot): AssumptionPromptGuidance {
-  const suggestedDefaults = {
+export function buildAssumptionGuidance(
+  result: ListingSnapshot,
+  options: { allowSuggestedDefaults?: boolean } = {},
+): AssumptionPromptGuidance {
+  const allowSuggestedDefaults = options.allowSuggestedDefaults ?? true;
+  const fullSuggestedDefaults = {
     nightly_rate: suggestNightlyRate(result),
     occupancy_rate: suggestOccupancyRate(result),
     management_rate: 0.2,
@@ -109,6 +113,7 @@ export function buildAssumptionGuidance(result: ListingSnapshot): AssumptionProm
     loan_term_years: 30,
     closing_cost_percent: 0.03,
   };
+  const suggestedDefaults = allowSuggestedDefaults ? fullSuggestedDefaults : {};
 
   const propertyKnown: string[] = propertyFieldNames.filter((field) => result[field] != null) as unknown as string[];
   const propertyMissing: string[] = propertyFieldNames.filter((field) => result[field] == null) as unknown as string[];
@@ -117,38 +122,50 @@ export function buildAssumptionGuidance(result: ListingSnapshot): AssumptionProm
     {
       field: "nightly_rate",
       reason: "Nightly rate drives gross revenue and break-even occupancy.",
-      suggested_value: suggestedDefaults.nightly_rate,
-      question: `What nightly rate do you want to assume? A reasonable starting point is about $${suggestedDefaults.nightly_rate}.`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.nightly_rate : null,
+      question: allowSuggestedDefaults
+        ? `What nightly rate do you want to assume? A reasonable starting point is about $${fullSuggestedDefaults.nightly_rate}.`
+        : "What nightly rate should we use once the property details are confirmed?",
     },
     {
       field: "occupancy_rate",
       reason: "Occupancy determines how often the property is booked.",
-      suggested_value: suggestedDefaults.occupancy_rate,
-      question: `What occupancy rate should we use? A reasonable baseline is ${(suggestedDefaults.occupancy_rate * 100).toFixed(0)}%.`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.occupancy_rate : null,
+      question: allowSuggestedDefaults
+        ? `What occupancy rate should we use? A reasonable baseline is ${(fullSuggestedDefaults.occupancy_rate * 100).toFixed(0)}%.`
+        : "What occupancy rate should we assume once the property details are confirmed?",
     },
     {
       field: "insurance_annual",
       reason: "Insurance is a fixed annual operating cost that affects NOI.",
-      suggested_value: suggestedDefaults.insurance_annual,
-      question: `Do you want to use an annual insurance estimate around $${suggestedDefaults.insurance_annual}?`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.insurance_annual : null,
+      question: allowSuggestedDefaults
+        ? `Do you want to use an annual insurance estimate around $${fullSuggestedDefaults.insurance_annual}?`
+        : "What annual insurance estimate should we use after the property details are confirmed?",
     },
     {
       field: "utilities_annual",
       reason: "Utilities meaningfully affect operating costs for short-term rentals.",
-      suggested_value: suggestedDefaults.utilities_annual,
-      question: `Should we estimate annual utilities at about $${suggestedDefaults.utilities_annual}?`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.utilities_annual : null,
+      question: allowSuggestedDefaults
+        ? `Should we estimate annual utilities at about $${fullSuggestedDefaults.utilities_annual}?`
+        : "What annual utilities estimate should we use after the property details are confirmed?",
     },
     {
       field: "loan_rate",
       reason: "Financing assumptions change mortgage cost and cash flow.",
-      suggested_value: suggestedDefaults.loan_rate,
-      question: `What loan interest rate should we use? A placeholder is ${(suggestedDefaults.loan_rate * 100).toFixed(2)}%.`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.loan_rate : null,
+      question: allowSuggestedDefaults
+        ? `What loan interest rate should we use? A placeholder is ${(fullSuggestedDefaults.loan_rate * 100).toFixed(2)}%.`
+        : "What loan interest rate should we use?",
     },
     {
       field: "down_payment_percent",
       reason: "Down payment changes leverage, mortgage payment, and cash-on-cash return.",
-      suggested_value: suggestedDefaults.down_payment_percent,
-      question: `What down payment percent should we use? A common baseline is ${(suggestedDefaults.down_payment_percent * 100).toFixed(0)}%.`,
+      suggested_value: allowSuggestedDefaults ? fullSuggestedDefaults.down_payment_percent : null,
+      question: allowSuggestedDefaults
+        ? `What down payment percent should we use? A common baseline is ${(fullSuggestedDefaults.down_payment_percent * 100).toFixed(0)}%.`
+        : "What down payment percent should we use?",
     },
   ];
 
@@ -163,7 +180,9 @@ export function buildAssumptionGuidance(result: ListingSnapshot): AssumptionProm
       suggested_defaults: suggestedDefaults,
     },
     llm_prompt: {
-      summary: "Use the extracted property fields as facts, treat the assumption fields as user-confirmed inputs, and ask concise follow-up questions for any assumptions before running ROI analysis.",
+      summary: allowSuggestedDefaults
+        ? "Use the extracted property fields as facts, treat the assumption fields as user-confirmed inputs, and ask concise follow-up questions for any assumptions before running ROI analysis."
+        : "Extraction did not produce enough trustworthy property facts. Ask the user for missing property details first, then gather investment assumptions.",
       follow_up_questions: fieldsToConfirm.map((field) => field.question),
       fields_to_confirm: fieldsToConfirm,
     },
