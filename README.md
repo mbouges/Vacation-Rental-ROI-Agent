@@ -21,7 +21,8 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
 - URL extraction with HTML parsing and JSON-LD structured-data fallback
-- Extraction diagnostics including `extracted_fields`, `missing_fields`, confidence, and site domain
+- Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
+- Manual-entry fallback prompts when extraction is blocked or unusable
 - Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
 - Regression tests for ROI math, persistence, follow-up parsing, and listing extraction
@@ -69,14 +70,18 @@ Returns:
 - original listing text
 - `extracted_fields` for property fields successfully found
 - `missing_fields` for property fields not found
+- `invalid_fields` for fields rejected by sanity checks
 - `extraction_confidence` as `low`, `medium`, or `high`
+- `fetch_status` as `not_applicable`, `success`, `blocked`, or `error`
+- `parse_status` as `success`, `partial`, `failed`, or `corrupt`
 - `site_domain` when URL extraction is used
+- `manual_entry_prompt` when the extractor needs the user to provide property details directly
 - `assumption_guidance` with:
   - `property_fields.known` and `property_fields.missing`
   - `assumption_fields.required`, `missing`, and `suggested_defaults`
   - `llm_prompt.summary`, `follow_up_questions`, and `fields_to_confirm`
 
-This lets the LLM clearly separate listing facts from investment assumptions before running analysis, while also understanding how complete and reliable the extraction appears to be.
+This lets the LLM separate listing facts from investment assumptions, understand whether extraction was blocked or low-trust, and fall back to manual entry when needed.
 
 ### `analyze_property`
 
@@ -156,12 +161,16 @@ Current test coverage includes:
 - nightly-rate follow-up handling
 - natural-text listing extraction
 - JSON-LD URL extraction fallback
-- extraction diagnostics for confidence, domain, and field completeness
+- blocked-site fallback behavior
+- corrupted address downgrade
+- `sqft` zero treated as missing
+- tax equal to price treated as invalid
 - structured assumption guidance generation
 
 ## Notes
 
 - Financial calculations run in TypeScript, not prompt text.
 - `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup and anti-bot behavior.
+- When extraction fails or looks untrustworthy, the extractor now returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
-- Analyses are now stored in local JSON so `answer_followup` can load previous analyses across sessions.
+- Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
