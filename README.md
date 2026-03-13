@@ -20,7 +20,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Scenario engine for follow-up what-if analysis
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
-- URL extraction routed through a strategy-based extractor architecture with site-specific extractors for beach-homes.com and condoinvestment.com plus a generic HTML/JSON-LD fallback
+- URL extraction routed through a strategy-based extractor architecture with site-specific extractors for `beach-homes.com` and `condoinvestment.com` plus a generic HTML/JSON-LD fallback
 - Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
 - Manual-entry fallback prompts when extraction is blocked or unusable
 - Assumption-completion guidance with suggested defaults for the LLM
@@ -42,6 +42,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - `scripts/mcpClient.mjs`: local MCP tool caller
 - `scripts/mcpWorkflow.mjs`: local same-session analyze + follow-up workflow
 - `test/*.test.ts`: regression tests
+- `test/fixtures/*`: sanitized HTML fixtures for extractor regression coverage
 
 ## Setup
 
@@ -162,7 +163,10 @@ Current test coverage includes:
 - nightly-rate follow-up handling
 - natural-text listing extraction
 - JSON-LD URL extraction fallback
-- site-specific extraction for beach-homes.com and condoinvestment.com using saved HTML fixtures
+- site-specific extraction for `beach-homes.com` and `condoinvestment.com` using saved HTML fixtures
+- fixture-based polluted-address rejection on supported domains
+- fixture-based invalid `tax_annual` handling on supported domains
+- fixture-based invalid `sqft` handling on supported domains
 - blocked-site fallback behavior
 - corrupted address downgrade
 - `sqft` zero treated as missing
@@ -173,10 +177,7 @@ Current test coverage includes:
 
 - Financial calculations run in TypeScript, not prompt text.
 - `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup and anti-bot behavior.
-- When extraction fails or looks untrustworthy, the extractor now returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
+- Site-specific extractors use targeted HTML selectors first and only fall back to the generic extractor when those selectors do not produce enough usable fields.
+- When extraction fails or looks untrustworthy, the extractor returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
 - Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
-
-
-
-
