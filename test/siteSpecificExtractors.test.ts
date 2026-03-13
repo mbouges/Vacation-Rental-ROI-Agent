@@ -77,3 +77,42 @@ test("site extractors fall back to generic parsing when selectors fail", async (
     globalThis.fetch = originalFetch;
   }
 });
+
+test("fixture extraction rejects polluted addresses on supported domains", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(loadFixture("beach-homes-polluted-address.html"), { status: 200 });
+
+  try {
+    const result = await parseListingFromUrl("https://www.beach-homes.com/florida/destin/example/listing/789");
+
+    assert.equal(result.address, null);
+    assert.ok(result.invalid_fields.includes("address"));
+    assert.ok(result.missing_fields.includes("address"));
+    assert.equal(result.parse_status, "corrupt");
+    assert.equal(result.extraction_confidence, "low");
+    assert.equal(result.price, 615000);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fixture extraction rejects invalid tax and sqft values on supported domains", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(loadFixture("condoinvestment-invalid-values.html"), { status: 200 });
+
+  try {
+    const result = await parseListingFromUrl("https://www.condoinvestment.com/listings/88-harbor-view");
+
+    assert.equal(result.price, 540000);
+    assert.equal(result.sqft, null);
+    assert.equal(result.tax_annual, null);
+    assert.ok(result.invalid_fields.includes("sqft"));
+    assert.ok(result.invalid_fields.includes("tax_annual"));
+    assert.ok(result.missing_fields.includes("sqft"));
+    assert.ok(result.missing_fields.includes("tax_annual"));
+    assert.equal(result.parse_status, "corrupt");
+    assert.equal(result.extraction_confidence, "low");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

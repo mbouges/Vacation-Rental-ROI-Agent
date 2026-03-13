@@ -1,4 +1,4 @@
-import { buildListingResult, htmlToText, isExtractionUsable, PartialListingFields } from "../core.js";
+import { buildListingResult, htmlToText, PartialListingFields } from "../core.js";
 import { fetchListingHtml } from "../fetchHtml.js";
 import { extractFirstNumber, extractFirstText } from "../htmlSelectors.js";
 import { buildGenericFailureResult, extractGenericListingFromHtml } from "../genericExtractor.js";
@@ -84,13 +84,10 @@ export class BeachHomesExtractor implements SiteSpecificListingExtractor {
         fetchStatus: "success",
       });
 
-      if (isExtractionUsable(siteResult)) {
-        return siteResult;
-      }
-
-      return extractGenericListingFromHtml(context, html);
+      return siteResult;
     } catch (error) {
       return buildGenericFailureResult(context, error);
     }
   }
 }
+

@@ -18,7 +18,7 @@ export function parseHtmlNumber(value: string | null | undefined): number | null
   }
 
   const normalized = Number(value.replace(/[^0-9.]/g, ""));
-  return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+  return Number.isFinite(normalized) ? normalized : null;
 }
 
 export function extractFirstText(html: string, patterns: RegExp[]): string | null {
@@ -39,3 +39,4 @@ export function extractFirstNumber(html: string, patterns: RegExp[]): number | n
   const value = extractFirstText(html, patterns);
   return parseHtmlNumber(value);
 }
+
