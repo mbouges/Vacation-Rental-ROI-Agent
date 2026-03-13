@@ -392,7 +392,7 @@ export function deriveFetchStatus(errorMessage: string): FetchStatus {
   return "error";
 }
 
-function isExtractionUsable(result: {
+export function isExtractionUsable(result: {
   extracted_fields: string[];
   parse_status: ParseStatus;
   fetch_status: FetchStatus;
@@ -488,3 +488,4 @@ export function buildListingResult(
     manual_entry_prompt: usable ? null : buildManualEntryPrompt(partialResult),
   };
 }
+

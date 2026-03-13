@@ -1,5 +1,7 @@
 import { ExtractListingResult } from "../../models/property.js";
 import { GenericListingExtractor } from "./genericExtractor.js";
+import { BeachHomesExtractor } from "./sites/beachHomesExtractor.js";
+import { CondoInvestmentExtractor } from "./sites/condoInvestmentExtractor.js";
 import { ListingExtractionContext, ListingExtractor, SiteSpecificListingExtractor } from "./types.js";
 
 export class ListingExtractorRouter {
@@ -17,11 +19,18 @@ export class ListingExtractorRouter {
   }
 }
 
+function defaultSiteSpecificExtractors(): SiteSpecificListingExtractor[] {
+  return [new BeachHomesExtractor(), new CondoInvestmentExtractor()];
+}
+
 export function createListingExtractorRouter(
   options: {
     genericExtractor?: ListingExtractor;
     siteSpecificExtractors?: SiteSpecificListingExtractor[];
   } = {},
 ): ListingExtractorRouter {
-  return new ListingExtractorRouter(options.genericExtractor, options.siteSpecificExtractors ?? []);
+  return new ListingExtractorRouter(
+    options.genericExtractor,
+    options.siteSpecificExtractors ?? defaultSiteSpecificExtractors(),
+  );
 }

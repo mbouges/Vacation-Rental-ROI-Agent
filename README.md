@@ -20,7 +20,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Scenario engine for follow-up what-if analysis
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
-- URL extraction routed through a strategy-based extractor architecture with a generic HTML/JSON-LD fallback
+- URL extraction routed through a strategy-based extractor architecture with site-specific extractors for beach-homes.com and condoinvestment.com plus a generic HTML/JSON-LD fallback
 - Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
 - Manual-entry fallback prompts when extraction is blocked or unusable
 - Assumption-completion guidance with suggested defaults for the LLM
@@ -35,8 +35,8 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - `src/services/analysisExplainer.ts`: plain-English analysis summaries
 - `src/services/analysisStore.ts`: persistent local JSON analysis storage
 - `src/services/assumptionPrompter.ts`: assumption guidance and suggested defaults
-- src/services/listingParser.ts: public extraction entrypoints for raw text and URL parsing
-- src/services/listingExtraction/*: domain router, generic extractor, and shared extraction utilities
+- `src/services/listingParser.ts`: public extraction entrypoints for raw text and URL parsing
+- `src/services/listingExtraction/*`: domain router, site-specific extractors, generic extractor, and shared extraction utilities
 - `src/services/scenarioEngine.ts`: follow-up scenario handling
 - `src/models/*`: shared types
 - `scripts/mcpClient.mjs`: local MCP tool caller
@@ -162,6 +162,7 @@ Current test coverage includes:
 - nightly-rate follow-up handling
 - natural-text listing extraction
 - JSON-LD URL extraction fallback
+- site-specific extraction for beach-homes.com and condoinvestment.com using saved HTML fixtures
 - blocked-site fallback behavior
 - corrupted address downgrade
 - `sqft` zero treated as missing
@@ -175,5 +176,7 @@ Current test coverage includes:
 - When extraction fails or looks untrustworthy, the extractor now returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
 - Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
+
+
 
 
