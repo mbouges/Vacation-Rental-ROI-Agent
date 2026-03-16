@@ -1,97 +1,144 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-import { createAnalyzePropertyTool } from "./tools/analyzeProperty.js";
-import { createAnswerFollowupTool } from "./tools/answerFollowup.js";
-import { extractListing } from "./tools/extractListing.js";
-import { ScenarioEngine } from "./services/scenarioEngine.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createMcpServer } from "./createMcpServer.js";
 
-const scenarioEngine = new ScenarioEngine();
-const analyzeProperty = createAnalyzePropertyTool(scenarioEngine);
-const answerFollowup = createAnswerFollowupTool(scenarioEngine);
+type SessionContext = {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+};
 
-const server = new McpServer({
-  name: "vacation-rental-agent",
-  version: "0.1.0",
-});
+const activeSessions = new Map<string, SessionContext>();
 
-server.tool(
-  "extract_listing",
-  "Extract property details from a listing URL or optional raw listing text.",
-  {
-    url: z.string().url().optional(),
-    rawText: z.string().optional(),
-  },
-  async ({ url, rawText }) => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(await extractListing({ url, rawText }), null, 2),
-      },
-    ],
-  }),
-);
+function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(body));
+}
 
-server.tool(
-  "analyze_property",
-  "Run vacation-rental ROI calculations from property details and investment assumptions.",
-  {
-    property: z.object({
-      address: z.string(),
-      price: z.number().positive(),
-      beds: z.number().nullable().optional(),
-      baths: z.number().nullable().optional(),
-      sqft: z.number().nullable().optional(),
-      hoa_monthly: z.number().nullable().optional(),
-      tax_annual: z.number().nullable().optional(),
-      property_type: z.enum(["condo", "house", "townhouse"]).nullable().optional(),
-      raw_listing_text: z.string().optional(),
-      listing_url: z.string().url().optional(),
-    }),
-    assumptions: z.object({
-      nightly_rate: z.number().nonnegative(),
-      occupancy_rate: z.number().nonnegative(),
-      management_rate: z.number().nonnegative(),
-      maintenance_rate: z.number().nonnegative(),
-      platform_fee_rate: z.number().nonnegative().optional(),
-      insurance_annual: z.number().nonnegative(),
-      utilities_annual: z.number().nonnegative(),
-      loan_rate: z.number().nonnegative(),
-      down_payment_percent: z.number().nonnegative(),
-      loan_term_years: z.number().positive().optional(),
-      closing_cost_percent: z.number().nonnegative().optional(),
-    }),
-  },
-  async (input) => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(await analyzeProperty(input), null, 2),
-      },
-    ],
-  }),
-);
+function getRequestPath(req: IncomingMessage): string {
+  const host = req.headers.host ?? "localhost";
+  const url = new URL(req.url ?? "/", `http://${host}`);
+  return url.pathname;
+}
 
-server.tool(
-  "answer_followup",
-  "Update an existing ROI analysis based on a natural-language follow-up scenario.",
-  {
-    analysis_id: z.string().min(1),
-    question: z.string().min(1),
-  },
-  async ({ analysis_id, question }) => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(await answerFollowup({ analysis_id, question }), null, 2),
-      },
-    ],
-  }),
-);
+async function createHttpSession(): Promise<SessionContext> {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: randomUUID,
+    enableJsonResponse: true,
+    onsessioninitialized: async (sessionId) => {
+      activeSessions.set(sessionId, { server, transport });
+    },
+    onsessionclosed: async (sessionId) => {
+      activeSessions.delete(sessionId);
+      await server.close();
+    },
+  });
 
-async function main(): Promise<void> {
+  transport.onerror = (error) => {
+    console.error("MCP HTTP transport error:", error);
+  };
+
+  await server.connect(transport);
+  return { server, transport };
+}
+
+async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const sessionIdHeader = req.headers["mcp-session-id"];
+  const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader;
+
+  if (sessionId && !activeSessions.has(sessionId)) {
+    sendJson(res, 404, {
+      error: "Session not found",
+      sessionId,
+    });
+    return;
+  }
+
+  const session = sessionId ? activeSessions.get(sessionId)! : await createHttpSession();
+
+  try {
+    await session.transport.handleRequest(req, res);
+  } finally {
+    if (!session.transport.sessionId) {
+      await session.server.close();
+    }
+  }
+}
+
+async function startHttpServer(): Promise<void> {
+  const port = Number(process.env.PORT ?? "3000");
+  const host = process.env.HOST ?? "0.0.0.0";
+
+  const server = createServer((req, res) => {
+    void (async () => {
+      const path = getRequestPath(req);
+
+      if (req.method === "GET" && path === "/health") {
+        sendJson(res, 200, {
+          status: "ok",
+          service: "vacation-rental-agent",
+          transport: "http",
+        });
+        return;
+      }
+
+      if (path === "/mcp") {
+        await handleMcpRequest(req, res);
+        return;
+      }
+
+      if (req.method === "GET" && path === "/") {
+        sendJson(res, 200, {
+          status: "ok",
+          message: "Vacation Rental ROI Agent MCP server",
+          endpoints: ["/mcp", "/health"],
+        });
+        return;
+      }
+
+      if (path === "/mcp") {
+        res.statusCode = 405;
+        res.setHeader("Allow", "GET, POST, DELETE");
+        res.end("Method Not Allowed");
+        return;
+      }
+
+      sendJson(res, 404, { error: "Not found" });
+    })().catch((error) => {
+      console.error("Failed to handle HTTP request:", error);
+
+      if (!res.headersSent) {
+        sendJson(res, 500, { error: "Internal server error" });
+      } else {
+        res.end();
+      }
+    });
+  });
+
+  server.listen(port, host, () => {
+    console.log(`Vacation Rental ROI Agent MCP server listening on http://${host}:${port}`);
+  });
+}
+
+async function startStdioServer(): Promise<void> {
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+async function main(): Promise<void> {
+  const mode = process.env.MCP_TRANSPORT ?? (process.env.PORT ? "http" : "stdio");
+
+  if (mode === "http") {
+    await startHttpServer();
+    return;
+  }
+
+  await startStdioServer();
 }
 
 main().catch((error) => {

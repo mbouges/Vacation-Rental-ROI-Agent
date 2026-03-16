@@ -5,6 +5,9 @@
   "description": "AI Vacation Rental ROI Agent MCP server and ROI calculator",
   "type": "module",
   "main": "dist/server.js",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server.ts",

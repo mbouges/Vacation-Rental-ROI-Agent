@@ -71,6 +71,18 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 4. Run `npm test`
 5. Run `npm run dev`
 
+## Deployment
+
+Railway deployment is configured with [railway.json](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/railway.json):
+
+- Node.js 24 runtime via the `engines.node` field in [package.json](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/package.json)
+- build step: `npm run build`
+- start command: `node dist/server.js`
+- MCP endpoint: `/mcp`
+- health check endpoint: `/health`
+
+When `PORT` is set, the server starts in HTTP mode automatically. Without `PORT`, it defaults to stdio for local MCP use.
+
 ## Recommended user workflow
 
 1. Call `extract_listing` with a URL or pasted listing text.
