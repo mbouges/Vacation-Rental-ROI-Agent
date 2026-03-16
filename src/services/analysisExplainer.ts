@@ -18,18 +18,18 @@ function topExpenseLines(analysis: RoiAnalysis): string[] {
   return Object.entries(analysis.total_expense_breakdown)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .map(([label, amount]) => `${label.replace(/_/g, " ")} at ${formatCurrency(amount)}`);
+    .map(([label, amount]) => `${label.replace(/_/g, " ")} ${formatCurrency(amount)}`);
 }
 
-function occupancyContext(assumptions: InvestmentAssumptions, analysis: RoiAnalysis): string {
+function breakEvenContext(assumptions: InvestmentAssumptions, analysis: RoiAnalysis): string {
   const occupancy = formatPercent(assumptions.occupancyRate);
   const breakEven = formatPercent(analysis.break_even_occupancy);
 
   if (analysis.annual_cash_flow >= 0) {
-    return `At ${occupancy} occupancy, the property is above the estimated break-even level of ${breakEven}.`;
+    return `Assumed occupancy is ${occupancy} versus break-even at ${breakEven}.`;
   }
 
-  return `At ${occupancy} occupancy, the property is below the estimated break-even level of ${breakEven}.`;
+  return `Assumed occupancy is ${occupancy} versus break-even at ${breakEven}, so this deal is currently under the break-even threshold.`;
 }
 
 export function buildAnalysisExplanation(
@@ -44,18 +44,9 @@ export function buildAnalysisExplanation(
   const revenue = formatCurrency(analysis.gross_revenue);
   const expenseDrivers = topExpenseLines(analysis);
 
-  const headline =
-    analysis.annual_cash_flow >= 0
-      ? `${property.address} looks cash-flow positive at roughly ${cashFlow} per year.`
-      : `${property.address} currently looks cash-flow negative at roughly ${cashFlow} per year.`;
+  const headline = `${property.address}: estimated annual cash flow is ${cashFlow}.`;
+  const performance = `Annual revenue is about ${revenue}, NOI is ${noi}, cap rate is ${capRate}, and cash-on-cash return is ${cashOnCash}.`;
+  const drivers = expenseDrivers.length > 0 ? `Largest costs: ${expenseDrivers.join(" and ")}.` : "";
 
-  const performance = `It generates about ${revenue} in annual gross revenue, ${noi} in NOI, a cap rate near ${capRate}, and cash-on-cash return around ${cashOnCash}.`;
-
-  const drivers = expenseDrivers.length > 0
-    ? `The biggest expense drivers are ${expenseDrivers.join(" and ")}.`
-    : "";
-
-  return [headline, occupancyContext(assumptions, analysis), performance, drivers]
-    .filter(Boolean)
-    .join(" ");
+  return [headline, breakEvenContext(assumptions, analysis), performance, drivers].filter(Boolean).join(" ");
 }
