@@ -2,6 +2,17 @@ export type PropertyType = "condo" | "house" | "townhouse";
 export type ExtractionConfidence = "low" | "medium" | "high";
 export type FetchStatus = "not_applicable" | "success" | "blocked" | "error";
 export type ParseStatus = "success" | "partial" | "failed" | "corrupt";
+export type ExtractionFieldName =
+  | "address"
+  | "price"
+  | "beds"
+  | "baths"
+  | "sqft"
+  | "hoa_monthly"
+  | "tax_annual"
+  | "property_type";
+export type ExtractionFieldSource = "site_selector" | "structured_data" | "heuristic_text" | "missing";
+export type ExtractionFieldStatus = "extracted" | "missing" | "invalid";
 
 export interface Property {
   address: string;
@@ -47,6 +58,14 @@ export interface ManualEntryPrompt {
   follow_up_questions: string[];
 }
 
+export interface ExtractionFieldProvenance {
+  source: ExtractionFieldSource;
+  confidence: ExtractionConfidence | "none";
+  status: ExtractionFieldStatus;
+}
+
+export type ExtractionFieldProvenanceMap = Record<ExtractionFieldName, ExtractionFieldProvenance>;
+
 export interface ExtractListingResult {
   address: string | null;
   price: number | null;
@@ -64,6 +83,7 @@ export interface ExtractListingResult {
   parse_status: ParseStatus;
   site_domain: string | null;
   invalid_fields: string[];
+  field_provenance: ExtractionFieldProvenanceMap;
   assumption_guidance: AssumptionPromptGuidance;
   manual_entry_prompt: ManualEntryPrompt | null;
 }

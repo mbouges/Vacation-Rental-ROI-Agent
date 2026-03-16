@@ -1,4 +1,4 @@
-import { buildListingResult, htmlToText, PartialListingFields } from "../core.js";
+import { buildFieldCandidates, buildListingResult, htmlToText, PartialListingFields } from "../core.js";
 import { fetchListingHtml } from "../fetchHtml.js";
 import { extractFirstNumber, extractFirstText } from "../htmlSelectors.js";
 import { buildGenericFailureResult, extractGenericListingFromHtml } from "../genericExtractor.js";
@@ -82,6 +82,7 @@ export class BeachHomesExtractor implements SiteSpecificListingExtractor {
       const siteResult = buildListingResult(htmlToText(html), siteFields, {
         siteDomain: context.siteDomain,
         fetchStatus: "success",
+        primaryCandidates: buildFieldCandidates(siteFields, "site_selector", "high"),
       });
 
       return siteResult;
