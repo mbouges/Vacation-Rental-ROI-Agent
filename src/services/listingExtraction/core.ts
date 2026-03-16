@@ -313,6 +313,21 @@ function sanitizeFields(fields: PartialListingFields): { sanitized: PartialListi
     invalidFields.push("address");
   }
 
+  if (sanitized.price != null && sanitized.price < 10000) {
+    sanitized.price = null;
+    invalidFields.push("price");
+  }
+
+  if (sanitized.beds != null && sanitized.beds > 20) {
+    sanitized.beds = null;
+    invalidFields.push("beds");
+  }
+
+  if (sanitized.baths != null && sanitized.baths > 20) {
+    sanitized.baths = null;
+    invalidFields.push("baths");
+  }
+
   if (sanitized.sqft != null && sanitized.sqft <= 0) {
     sanitized.sqft = null;
     invalidFields.push("sqft");
@@ -411,37 +426,59 @@ export function isExtractionUsable(result: {
 function buildManualEntryPrompt(result: {
   fetch_status: FetchStatus;
   parse_status: ParseStatus;
+  extraction_confidence: ExtractionConfidence;
   site_domain: string | null;
-}): ManualEntryPrompt | null {
-  if (
-    isExtractionUsable({
-      extracted_fields: [],
-      parse_status: result.parse_status,
-      fetch_status: result.fetch_status,
-    }) && result.parse_status !== "failed"
-  ) {
-    return null;
-  }
+  extracted_fields: string[];
+  missing_fields: string[];
+  invalid_fields: string[];
+}): ManualEntryPrompt {
+  const requiredPropertyFacts = ["address", "price"];
+  const helpfulPropertyFacts = ["beds", "baths", "sqft", "property_type", "hoa_monthly", "tax_annual"];
+  const optionalAssumptions = [
+    "nightly_rate",
+    "occupancy_rate",
+    "insurance_annual",
+    "utilities_annual",
+    "loan_rate",
+    "down_payment_percent",
+  ];
 
   const reason =
     result.fetch_status === "blocked"
       ? `The source site${result.site_domain ? ` (${result.site_domain})` : ""} blocked automated extraction.`
       : result.parse_status === "corrupt"
-        ? "The page was fetched, but the extracted values were not trustworthy enough to use directly."
-        : "The page did not produce enough reliable property details to continue automatically.";
+        ? "The page was fetched, but some extracted values were unreliable and need confirmation before analysis."
+        : result.fetch_status === "error"
+          ? "The listing could not be fetched reliably, so I could not extract enough trusted property facts."
+          : result.extraction_confidence === "low" && result.extracted_fields.length > 0
+            ? "I found a few listing details, but the result is still too low-confidence to trust without manual confirmation."
+            : "The page did not produce enough reliable property details to continue automatically.";
+
+  const nextStep =
+    result.fetch_status === "blocked" || result.fetch_status === "error"
+      ? "Paste the listing text if you have it. If not, send the address and asking price first."
+      : "Paste the listing text or confirm the address and asking price so I can continue with ROI analysis.";
+
+  const suggestedUserPrompt =
+    result.fetch_status === "blocked" || result.fetch_status === "error"
+      ? "Please paste the listing description first. If you do not have it, send the address and asking price, then any beds, baths, sqft, property type, HOA, and annual taxes you can find."
+      : "Please paste the listing description or confirm the address and asking price first. After that, share any available beds, baths, sqft, property type, HOA, and annual taxes.";
 
   return {
     reason,
-    requested_property_fields: ["address", "price", "beds", "baths", "sqft", "property_type", "hoa_monthly", "tax_annual"],
-    suggested_user_prompt:
-      "Please paste the listing description or provide the address, asking price, beds, baths, sqft, property type, HOA, and annual taxes so I can continue the analysis.",
+    next_step: nextStep,
+    preferred_input: "paste_listing_text",
+    required_property_facts: requiredPropertyFacts,
+    helpful_property_facts: helpfulPropertyFacts,
+    optional_assumptions: optionalAssumptions,
+    requested_property_fields: [...requiredPropertyFacts, ...helpfulPropertyFacts],
+    suggested_user_prompt: suggestedUserPrompt,
     follow_up_questions: [
-      "What is the property address?",
+      "Can you paste the listing text?",
+      "If not, what is the property address?",
       "What is the asking price?",
-      "How many beds and baths does it have?",
-      "What is the square footage?",
-      "What is the property type?",
-      "If available, what are the monthly HOA dues and annual property taxes?",
+      "If available, how many beds and baths does it have?",
+      "If available, what are the square footage, property type, HOA dues, and annual taxes?",
     ],
   };
 }
@@ -481,11 +518,12 @@ export function buildListingResult(
   };
 
   const usable = isExtractionUsable(partialResult);
+  const needsFallbackWorkflow = !usable || partialResult.extraction_confidence === "low";
+  const allowSuggestedDefaults = usable && partialResult.extraction_confidence !== "low";
 
   return {
     ...partialResult,
-    assumption_guidance: buildAssumptionGuidance(partialResult, { allowSuggestedDefaults: usable }),
-    manual_entry_prompt: usable ? null : buildManualEntryPrompt(partialResult),
+    assumption_guidance: buildAssumptionGuidance(partialResult, { allowSuggestedDefaults }),
+    manual_entry_prompt: needsFallbackWorkflow ? buildManualEntryPrompt(partialResult) : null,
   };
 }
-

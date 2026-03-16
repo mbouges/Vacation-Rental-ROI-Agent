@@ -37,7 +37,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Listing extraction from pasted listing text
 - URL extraction routed through a strategy-based extractor architecture with site-specific extractors for `beach-homes.com` and `condoinvestment.com` plus a generic HTML/JSON-LD fallback
 - Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
-- Manual-entry fallback prompts when extraction is blocked or unusable
+- First-class fallback prompts for blocked, error, failed, corrupt, and low-confidence extraction results
 - Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
 - Regression tests for ROI math, persistence, follow-up parsing, and listing extraction
@@ -67,12 +67,16 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 4. Run `npm test`
 5. Run `npm run dev`
 
-## Sample workflow
+## Recommended user workflow
 
-1. Call `extract_listing` with pasted listing text or a URL.
-2. Inspect `assumption_guidance` to see known property fields, missing property fields, and suggested defaults.
-3. Collect any missing assumptions you want to confirm with the user.
-4. Call `analyze_property` with the property details and final assumptions.
+1. Call `extract_listing` with a URL or pasted listing text.
+2. If extraction succeeds with good confidence, use the returned property details plus `assumption_guidance` to gather final assumptions.
+3. If extraction is blocked, failed, corrupt, or low-confidence, use `manual_entry_prompt`.
+   Preferred fallback: ask the user to paste the listing text.
+   Minimum property facts needed to run analysis: `address` and `price`.
+   Helpful but optional property facts: `beds`, `baths`, `sqft`, `property_type`, `hoa_monthly`, `tax_annual`.
+   Optional assumptions to confirm later: `nightly_rate`, `occupancy_rate`, `insurance_annual`, `utilities_annual`, `loan_rate`, `down_payment_percent`.
+4. Call `analyze_property` with confirmed property details and assumptions.
 5. Use the returned `analysis_id` with `answer_followup` for what-if questions.
 
 ## Available tools
@@ -100,7 +104,13 @@ Returns:
 - `fetch_status` as `not_applicable`, `success`, `blocked`, or `error`
 - `parse_status` as `success`, `partial`, `failed`, or `corrupt`
 - `site_domain` when URL extraction is used
-- `manual_entry_prompt` when the extractor needs the user to provide property details directly
+- `manual_entry_prompt` with:
+  - `next_step`
+  - `preferred_input`
+  - `required_property_facts`
+  - `helpful_property_facts`
+  - `optional_assumptions`
+  - `suggested_user_prompt`
 - `assumption_guidance` with:
   - `property_fields.known` and `property_fields.missing`
   - `assumption_fields.required`, `missing`, and `suggested_defaults`
@@ -191,6 +201,8 @@ Current test coverage includes:
 - fixture-based invalid `tax_annual` handling on supported domains
 - fixture-based invalid `sqft` handling on supported domains
 - blocked-site fallback behavior
+- low-confidence fallback prompt generation
+- required-property-facts vs optional-assumptions fallback guidance
 - corrupted address downgrade
 - `sqft` zero treated as missing
 - tax equal to price treated as invalid
@@ -201,6 +213,7 @@ Current test coverage includes:
 - Financial calculations run in TypeScript, not prompt text.
 - `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup and anti-bot behavior.
 - Site-specific extractors use targeted HTML selectors first and only fall back to the generic extractor when those selectors do not produce enough usable fields.
-- When extraction fails or looks untrustworthy, the extractor returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
+- When extraction is blocked or low-confidence, the preferred fallback is pasted listing text.
+- If pasted listing text is not available, the smallest property fact set needed to continue is `address` plus `price`.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
 - Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
