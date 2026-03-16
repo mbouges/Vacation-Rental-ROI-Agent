@@ -1,14 +1,21 @@
 import { ExtractListingResult } from "../../models/property.js";
-import { buildListingResult, deriveFetchStatus, extractSiteDomain, extractStructuredListingFields, htmlToText } from "./core.js";
+import {
+  buildListingResult,
+  deriveFetchStatus,
+  extractSiteDomain,
+  extractStructuredListingCandidates,
+  htmlToText,
+} from "./core.js";
 import { fetchListingHtml } from "./fetchHtml.js";
 import { ListingExtractionContext, ListingExtractor } from "./types.js";
 
 export function extractGenericListingFromHtml(context: ListingExtractionContext, html: string): ExtractListingResult {
   const text = htmlToText(html);
-  const structuredFields = extractStructuredListingFields(html);
-  const parsed = buildListingResult(text, structuredFields, {
+  const structuredCandidates = extractStructuredListingCandidates(html);
+  const parsed = buildListingResult(text, {}, {
     siteDomain: context.siteDomain,
     fetchStatus: "success",
+    primaryCandidates: structuredCandidates,
   });
 
   return {

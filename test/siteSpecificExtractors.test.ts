@@ -28,6 +28,8 @@ test("beach-homes extractor uses site selectors when available", async () => {
     assert.equal(result.fetch_status, "success");
     assert.equal(result.parse_status, "success");
     assert.equal(result.site_domain, "www.beach-homes.com");
+    assert.equal(result.field_provenance.address.source, "site_selector");
+    assert.equal(result.field_provenance.address.confidence, "high");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -51,6 +53,7 @@ test("condoinvestment extractor uses site selectors when available", async () =>
     assert.equal(result.fetch_status, "success");
     assert.equal(result.parse_status, "success");
     assert.equal(result.site_domain, "www.condoinvestment.com");
+    assert.equal(result.field_provenance.price.source, "site_selector");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -73,6 +76,7 @@ test("site extractors fall back to generic parsing when selectors fail", async (
     assert.equal(result.property_type, "condo");
     assert.equal(result.fetch_status, "success");
     assert.equal(result.parse_status, "success");
+    assert.equal(result.field_provenance.address.source, "structured_data");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -91,6 +95,8 @@ test("fixture extraction rejects polluted addresses on supported domains", async
     assert.equal(result.parse_status, "corrupt");
     assert.equal(result.extraction_confidence, "low");
     assert.equal(result.price, 615000);
+    assert.equal(result.field_provenance.address.status, "invalid");
+    assert.equal(result.field_provenance.price.source, "site_selector");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -112,6 +118,8 @@ test("fixture extraction rejects invalid tax and sqft values on supported domain
     assert.ok(result.missing_fields.includes("tax_annual"));
     assert.equal(result.parse_status, "corrupt");
     assert.equal(result.extraction_confidence, "low");
+    assert.equal(result.field_provenance.sqft.status, "invalid");
+    assert.equal(result.field_provenance.tax_annual.status, "invalid");
   } finally {
     globalThis.fetch = originalFetch;
   }

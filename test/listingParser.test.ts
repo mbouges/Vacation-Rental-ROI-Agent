@@ -19,6 +19,10 @@ test("parseListingFromText extracts listing details from natural text", () => {
   assert.equal(result.fetch_status, "not_applicable");
   assert.equal(result.parse_status, "success");
   assert.equal(result.extraction_confidence, "high");
+  assert.equal(result.field_provenance.address.source, "heuristic_text");
+  assert.equal(result.field_provenance.address.status, "extracted");
+  assert.equal(result.field_provenance.price.source, "heuristic_text");
+  assert.equal(result.field_provenance.price.confidence, "medium");
   assert.equal(result.manual_entry_prompt, null);
 });
 
@@ -35,6 +39,8 @@ test("blocked site response returns structured manual-entry fallback", async () 
     assert.deepEqual(result.extracted_fields, []);
     assert.equal(result.site_domain, "example.com");
     assert.ok(result.manual_entry_prompt);
+    assert.equal(result.field_provenance.address.status, "missing");
+    assert.equal(result.field_provenance.address.source, "missing");
     assert.equal(result.manual_entry_prompt?.preferred_input, "paste_listing_text");
     assert.deepEqual(result.manual_entry_prompt?.required_property_facts, ["address", "price"]);
     assert.ok(result.manual_entry_prompt?.optional_assumptions.includes("nightly_rate"));
@@ -55,6 +61,8 @@ test("corrupted address is treated as invalid and downgrades parse status", () =
   assert.ok(result.missing_fields.includes("address"));
   assert.equal(result.parse_status, "corrupt");
   assert.equal(result.extraction_confidence, "low");
+  assert.equal(result.field_provenance.address.status, "invalid");
+  assert.equal(result.field_provenance.address.source, "heuristic_text");
 });
 
 test("sqft zero is treated as missing", () => {
@@ -65,6 +73,7 @@ test("sqft zero is treated as missing", () => {
   assert.equal(result.sqft, null);
   assert.ok(result.invalid_fields.includes("sqft"));
   assert.ok(result.missing_fields.includes("sqft"));
+  assert.equal(result.field_provenance.sqft.status, "invalid");
 });
 
 test("tax parsed equal to price is treated as invalid", () => {
@@ -75,6 +84,7 @@ test("tax parsed equal to price is treated as invalid", () => {
   assert.equal(result.tax_annual, null);
   assert.ok(result.invalid_fields.includes("tax_annual"));
   assert.ok(result.missing_fields.includes("tax_annual"));
+  assert.equal(result.field_provenance.tax_annual.status, "invalid");
 });
 
 test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () => {
@@ -121,6 +131,9 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.parse_status, "partial");
   assert.equal(result.extraction_confidence, "high");
   assert.equal(result.site_domain, null);
+  assert.equal(result.field_provenance.address.source, "structured_data");
+  assert.equal(result.field_provenance.hoa_monthly.status, "missing");
+  assert.equal(result.field_provenance.hoa_monthly.confidence, "none");
   assert.equal(result.manual_entry_prompt, null);
 });
 

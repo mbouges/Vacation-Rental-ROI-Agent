@@ -36,7 +36,7 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Conversational explanation layer for investor-friendly summaries
 - Listing extraction from pasted listing text
 - URL extraction routed through a strategy-based extractor architecture with site-specific extractors for `beach-homes.com` and `condoinvestment.com` plus a generic HTML/JSON-LD fallback
-- Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
+- Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, site domain, and per-field provenance
 - First-class fallback prompts for blocked, error, failed, corrupt, and low-confidence extraction results
 - Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
@@ -104,6 +104,7 @@ Returns:
 - `extracted_fields` for property fields successfully found
 - `missing_fields` for property fields not found
 - `invalid_fields` for fields rejected by sanity checks
+- `field_provenance` so each property field reports whether it came from site selectors, structured data, or heuristic text parsing
 - `extraction_confidence` as `low`, `medium`, or `high`
 - `fetch_status` as `not_applicable`, `success`, `blocked`, or `error`
 - `parse_status` as `success`, `partial`, `failed`, or `corrupt`
@@ -210,6 +211,7 @@ Current test coverage includes:
 - fixture-based polluted-address rejection on supported domains
 - fixture-based invalid `tax_annual` handling on supported domains
 - fixture-based invalid `sqft` handling on supported domains
+- field-level provenance for heuristic, structured-data, and site-selector extraction paths
 - low-confidence extraction fallback prompting
 - absurd numeric value rejection for extraction sanity checks
 - blocked-site fallback behavior

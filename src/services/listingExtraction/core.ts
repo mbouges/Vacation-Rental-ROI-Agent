@@ -2,27 +2,25 @@ import { buildAssumptionGuidance } from "../assumptionPrompter.js";
 import {
   ExtractListingResult,
   ExtractionConfidence,
+  ExtractionFieldName,
+  ExtractionFieldProvenanceMap,
+  ExtractionFieldSource,
   FetchStatus,
   ManualEntryPrompt,
   ParseStatus,
   PropertyType,
 } from "../../models/property.js";
 
-const fieldNames: Array<
-  keyof Omit<
-    ExtractListingResult,
-    | "raw_listing_text"
-    | "extracted_fields"
-    | "missing_fields"
-    | "extraction_confidence"
-    | "fetch_status"
-    | "parse_status"
-    | "site_domain"
-    | "invalid_fields"
-    | "assumption_guidance"
-    | "manual_entry_prompt"
-  >
-> = ["address", "price", "beds", "baths", "sqft", "hoa_monthly", "tax_annual", "property_type"];
+const fieldNames: ExtractionFieldName[] = [
+  "address",
+  "price",
+  "beds",
+  "baths",
+  "sqft",
+  "hoa_monthly",
+  "tax_annual",
+  "property_type",
+];
 
 export type PartialListingFields = Partial<
   Omit<
@@ -35,16 +33,28 @@ export type PartialListingFields = Partial<
     | "parse_status"
     | "site_domain"
     | "invalid_fields"
+    | "field_provenance"
     | "assumption_guidance"
     | "manual_entry_prompt"
   >
 >;
+
+type ListingFieldValue = NonNullable<PartialListingFields[ExtractionFieldName]>;
+
+export interface ListingFieldCandidate {
+  value: ListingFieldValue;
+  source: ExtractionFieldSource;
+  confidence: ExtractionConfidence;
+}
+
+export type ListingFieldCandidates = Partial<Record<ExtractionFieldName, ListingFieldCandidate>>;
 
 type JsonRecord = Record<string, unknown>;
 
 type BuildResultOptions = {
   siteDomain?: string | null;
   fetchStatus?: FetchStatus;
+  primaryCandidates?: ListingFieldCandidates;
 };
 
 function currencyToNumber(value: string): number {
@@ -175,6 +185,39 @@ function normalizePropertyType(value: unknown): PropertyType | null {
   return matchPropertyType(value);
 }
 
+function createCandidate(
+  value: PartialListingFields[ExtractionFieldName] | null | undefined,
+  source: ExtractionFieldSource,
+  confidence: ExtractionConfidence,
+): ListingFieldCandidate | null {
+  if (value == null) {
+    return null;
+  }
+
+  return {
+    value: value as ListingFieldValue,
+    source,
+    confidence,
+  };
+}
+
+export function buildFieldCandidates(
+  fields: PartialListingFields,
+  source: ExtractionFieldSource,
+  confidence: ExtractionConfidence,
+): ListingFieldCandidates {
+  const candidates: ListingFieldCandidates = {};
+
+  for (const field of fieldNames) {
+    const candidate = createCandidate(fields[field], source, confidence);
+    if (candidate) {
+      candidates[field] = candidate;
+    }
+  }
+
+  return candidates;
+}
+
 function extractJsonLdObjects(html: string): JsonRecord[] {
   const matches = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
   const objects: JsonRecord[] = [];
@@ -214,7 +257,7 @@ function extractJsonLdObjects(html: string): JsonRecord[] {
   return objects;
 }
 
-export function extractStructuredListingFields(html: string): PartialListingFields {
+export function extractStructuredListingCandidates(html: string): ListingFieldCandidates {
   const objects = extractJsonLdObjects(html);
   const result: PartialListingFields = {};
 
@@ -246,7 +289,11 @@ export function extractStructuredListingFields(html: string): PartialListingFiel
       normalizePropertyType(obj.name);
   }
 
-  return result;
+  return buildFieldCandidates(result, "structured_data", "high");
+}
+
+export function extractStructuredListingFields(html: string): PartialListingFields {
+  return candidatesToFields(extractStructuredListingCandidates(html));
 }
 
 function buildHeuristicFields(rawText: string): PartialListingFields {
@@ -268,17 +315,31 @@ function buildHeuristicFields(rawText: string): PartialListingFields {
   };
 }
 
-function mergeListingFields(primary: PartialListingFields, fallback: PartialListingFields): PartialListingFields {
-  return {
-    address: primary.address ?? fallback.address ?? null,
-    price: primary.price ?? fallback.price ?? null,
-    beds: primary.beds ?? fallback.beds ?? null,
-    baths: primary.baths ?? fallback.baths ?? null,
-    sqft: primary.sqft ?? fallback.sqft ?? null,
-    hoa_monthly: primary.hoa_monthly ?? fallback.hoa_monthly ?? null,
-    tax_annual: primary.tax_annual ?? fallback.tax_annual ?? null,
-    property_type: primary.property_type ?? fallback.property_type ?? null,
-  };
+function buildHeuristicCandidates(rawText: string): ListingFieldCandidates {
+  return buildFieldCandidates(buildHeuristicFields(rawText), "heuristic_text", "medium");
+}
+
+function candidatesToFields(candidates: ListingFieldCandidates): PartialListingFields {
+  const fields: PartialListingFields = {};
+
+  for (const field of fieldNames) {
+    const candidate = candidates[field];
+    if (candidate) {
+      fields[field] = candidate.value as never;
+    }
+  }
+
+  return fields;
+}
+
+function mergeListingCandidates(primary: ListingFieldCandidates, fallback: ListingFieldCandidates): ListingFieldCandidates {
+  const merged: ListingFieldCandidates = {};
+
+  for (const field of fieldNames) {
+    merged[field] = primary[field] ?? fallback[field];
+  }
+
+  return merged;
 }
 
 function isPollutedAddress(address: string | null): boolean {
@@ -304,45 +365,81 @@ function isPollutedAddress(address: string | null): boolean {
   return badPhrases.some((phrase) => normalized.includes(phrase));
 }
 
-function sanitizeFields(fields: PartialListingFields): { sanitized: PartialListingFields; invalidFields: string[] } {
-  const sanitized: PartialListingFields = { ...fields };
+function sanitizeCandidates(candidates: ListingFieldCandidates): {
+  sanitized: PartialListingFields;
+  invalidFields: string[];
+  fieldProvenance: ExtractionFieldProvenanceMap;
+} {
+  const sanitizedCandidates: ListingFieldCandidates = { ...candidates };
   const invalidFields: string[] = [];
 
-  if (isPollutedAddress(sanitized.address ?? null)) {
-    sanitized.address = null;
+  if (isPollutedAddress((sanitizedCandidates.address?.value as string | null | undefined) ?? null)) {
+    delete sanitizedCandidates.address;
     invalidFields.push("address");
   }
 
-  if (sanitized.price != null && sanitized.price < 10000) {
-    sanitized.price = null;
-    invalidFields.push("price");
-  }
-
-  if (sanitized.beds != null && sanitized.beds > 20) {
-    sanitized.beds = null;
-    invalidFields.push("beds");
-  }
-
-  if (sanitized.baths != null && sanitized.baths > 20) {
-    sanitized.baths = null;
-    invalidFields.push("baths");
-  }
-
-  if (sanitized.sqft != null && sanitized.sqft <= 0) {
-    sanitized.sqft = null;
+  if (typeof sanitizedCandidates.sqft?.value === "number" && sanitizedCandidates.sqft.value <= 0) {
+    delete sanitizedCandidates.sqft;
     invalidFields.push("sqft");
   }
 
+  if (typeof sanitizedCandidates.price?.value === "number" && sanitizedCandidates.price.value < 10000) {
+    delete sanitizedCandidates.price;
+    invalidFields.push("price");
+  }
+
+  if (typeof sanitizedCandidates.beds?.value === "number" && sanitizedCandidates.beds.value > 20) {
+    delete sanitizedCandidates.beds;
+    invalidFields.push("beds");
+  }
+
+  if (typeof sanitizedCandidates.baths?.value === "number" && sanitizedCandidates.baths.value > 20) {
+    delete sanitizedCandidates.baths;
+    invalidFields.push("baths");
+  }
+
   if (
-    sanitized.tax_annual != null &&
-    sanitized.price != null &&
-    Math.abs(sanitized.tax_annual - sanitized.price) / Math.max(sanitized.price, 1) < 0.05
+    typeof sanitizedCandidates.tax_annual?.value === "number" &&
+    typeof sanitizedCandidates.price?.value === "number" &&
+    Math.abs(sanitizedCandidates.tax_annual.value - sanitizedCandidates.price.value) /
+      Math.max(sanitizedCandidates.price.value, 1) <
+      0.05
   ) {
-    sanitized.tax_annual = null;
+    delete sanitizedCandidates.tax_annual;
     invalidFields.push("tax_annual");
   }
 
-  return { sanitized, invalidFields };
+  const fieldProvenance = fieldNames.reduce<ExtractionFieldProvenanceMap>((acc, field) => {
+    const originalCandidate = candidates[field];
+    const sanitizedCandidate = sanitizedCandidates[field];
+
+    if (!originalCandidate) {
+      acc[field] = {
+        source: "missing",
+        confidence: "none",
+        status: "missing",
+      };
+      return acc;
+    }
+
+    if (!sanitizedCandidate) {
+      acc[field] = {
+        source: originalCandidate.source,
+        confidence: "low",
+        status: "invalid",
+      };
+      return acc;
+    }
+
+    acc[field] = {
+      source: sanitizedCandidate.source,
+      confidence: sanitizedCandidate.confidence,
+      status: "extracted",
+    };
+    return acc;
+  }, {} as ExtractionFieldProvenanceMap);
+
+  return { sanitized: candidatesToFields(sanitizedCandidates), invalidFields, fieldProvenance };
 }
 
 function computeConfidence(params: {
@@ -489,9 +586,10 @@ export function buildListingResult(
   options: BuildResultOptions = {},
 ): ExtractListingResult {
   const normalizedText = rawText.replace(/\s+/g, " ").trim();
-  const heuristicFields = buildHeuristicFields(rawText);
-  const mergedFields = mergeListingFields(structuredFields, heuristicFields);
-  const { sanitized, invalidFields } = sanitizeFields(mergedFields);
+  const heuristicCandidates = buildHeuristicCandidates(rawText);
+  const primaryCandidates = options.primaryCandidates ?? buildFieldCandidates(structuredFields, "structured_data", "high");
+  const mergedCandidates = mergeListingCandidates(primaryCandidates, heuristicCandidates);
+  const { sanitized, invalidFields, fieldProvenance } = sanitizeCandidates(mergedCandidates);
 
   const extractedFields = fieldNames.filter((field) => sanitized[field] != null).map((field) => field as string);
   const missingFields = fieldNames.filter((field) => sanitized[field] == null).map((field) => field as string);
@@ -515,6 +613,7 @@ export function buildListingResult(
     parse_status: parseStatus,
     site_domain: options.siteDomain ?? null,
     invalid_fields: invalidFields,
+    field_provenance: fieldProvenance,
   };
 
   const usable = isExtractionUsable(partialResult);
