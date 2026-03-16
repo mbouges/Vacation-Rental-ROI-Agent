@@ -119,3 +119,23 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.site_domain, null);
   assert.equal(result.manual_entry_prompt, null);
 });
+
+test("low-confidence partial extraction returns a manual review prompt", () => {
+  const result = parseListingFromText("Price: $6. 2 beds. Condo.");
+
+  assert.equal(result.price, null);
+  assert.ok(result.invalid_fields.includes("price"));
+  assert.equal(result.extraction_confidence, "low");
+  assert.ok(result.manual_entry_prompt);
+  assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
+});
+
+test("absurd bath counts are treated as invalid", () => {
+  const result = parseListingFromText(
+    "123 Beach Ave, Destin, FL 32541 listed for $485,000. 2 beds, 847 baths, 930 sqft. Condo.",
+  );
+
+  assert.equal(result.baths, null);
+  assert.ok(result.invalid_fields.includes("baths"));
+  assert.ok(result.manual_entry_prompt);
+});

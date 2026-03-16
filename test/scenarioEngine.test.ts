@@ -83,7 +83,7 @@ test("ScenarioEngine can answer follow-ups from a fresh engine instance", () => 
   const followup = secondEngine.answerFollowup(record.id, "What if occupancy drops to 50%?");
 
   assert.equal(followup.updated_assumptions.occupancyRate, 0.5);
-  assert.match(followup.explanation, /50.0% occupancy/);
+  assert.match(followup.explanation, /Assumed occupancy is 50.0%/);
 });
 
 test("ScenarioEngine treats 'drops by 10%' as relative occupancy decline", () => {
@@ -105,3 +105,4 @@ test("ScenarioEngine updates nightly rate from dollar question", () => {
 
   assert.equal(followup.updated_assumptions.nightlyRate, 200);
 });
+
