@@ -37,10 +37,11 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - Listing extraction from pasted listing text
 - URL extraction routed through a strategy-based extractor architecture with site-specific extractors for `beach-homes.com` and `condoinvestment.com` plus a generic HTML/JSON-LD fallback
 - Extraction diagnostics including extracted fields, missing fields, confidence, fetch status, parse status, invalid fields, and site domain
-- Manual-entry fallback prompts when extraction is blocked or unusable
+- Manual-entry fallback prompts when extraction is blocked, low-confidence, or unusable
 - Assumption-completion guidance with suggested defaults for the LLM
 - Local MCP client scripts for one-off calls and same-session workflows
 - Regression tests for ROI math, persistence, follow-up parsing, and listing extraction
+- Demo-readiness evaluation artifacts for recent live-listing runs
 
 ## Project structure
 
@@ -56,8 +57,11 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - `src/models/*`: shared types
 - `scripts/mcpClient.mjs`: local MCP tool caller
 - `scripts/mcpWorkflow.mjs`: local same-session analyze + follow-up workflow
+- `scripts/demoEvaluationUrls.json`: live URL batch used for demo-readiness evaluation
+- `scripts/runDemoEvaluation.mjs`: evaluation runner that exports CSV and JSON results
 - `test/*.test.ts`: regression tests
 - `test/fixtures/*`: sanitized HTML fixtures for extractor regression coverage
+- `docs/demo-readiness-*.{csv,json,md}`: live evaluation sheet and summary notes
 
 ## Setup
 
@@ -71,9 +75,10 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 
 1. Call `extract_listing` with pasted listing text or a URL.
 2. Inspect `assumption_guidance` to see known property fields, missing property fields, and suggested defaults.
-3. Collect any missing assumptions you want to confirm with the user.
-4. Call `analyze_property` with the property details and final assumptions.
-5. Use the returned `analysis_id` with `answer_followup` for what-if questions.
+3. If extraction is blocked or low-confidence, use `manual_entry_prompt` to collect confirmed facts from the user.
+4. Collect any missing assumptions you want to confirm with the user.
+5. Call `analyze_property` with the property details and final assumptions.
+6. Use the returned `analysis_id` with `answer_followup` for what-if questions.
 
 ## Available tools
 
@@ -100,7 +105,7 @@ Returns:
 - `fetch_status` as `not_applicable`, `success`, `blocked`, or `error`
 - `parse_status` as `success`, `partial`, `failed`, or `corrupt`
 - `site_domain` when URL extraction is used
-- `manual_entry_prompt` when the extractor needs the user to provide property details directly
+- `manual_entry_prompt` when the extractor needs the user to provide or confirm property details directly
 - `assumption_guidance` with:
   - `property_fields.known` and `property_fields.missing`
   - `assumption_fields.required`, `missing`, and `suggested_defaults`
@@ -169,6 +174,12 @@ Run analyze + follow-up in the same MCP session:
 node scripts/mcpWorkflow.mjs
 ```
 
+Run the current demo-readiness evaluation batch:
+
+```bash
+node --import tsx scripts/runDemoEvaluation.mjs
+```
+
 ## Testing
 
 Run all regression tests:
@@ -190,17 +201,34 @@ Current test coverage includes:
 - fixture-based polluted-address rejection on supported domains
 - fixture-based invalid `tax_annual` handling on supported domains
 - fixture-based invalid `sqft` handling on supported domains
+- low-confidence extraction fallback prompting
+- absurd numeric value rejection for extraction sanity checks
 - blocked-site fallback behavior
 - corrupted address downgrade
 - `sqft` zero treated as missing
 - tax equal to price treated as invalid
 - structured assumption guidance generation
 
+## Demo-readiness notes
+
+The latest live-listing evaluation batch is documented in:
+
+- `docs/demo-readiness-evaluation-2026-03-15.csv`
+- `docs/demo-readiness-evaluation-2026-03-15.json`
+- `docs/demo-readiness-summary-2026-03-15.md`
+
+Latest batch summary:
+
+- Listings tested: 19
+- Outcome mix: 8 blocked, 5 network errors, 4 failed, 2 corrupt
+- Recommendation: do not add another supported domain yet; focus on stronger manual fallback flows for blocked and low-confidence results
+
 ## Notes
 
 - Financial calculations run in TypeScript, not prompt text.
-- `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup and anti-bot behavior.
+- `extract_listing` attempts live URL fetches, but real-world listing-site coverage will still vary by site markup, anti-bot behavior, and network conditions.
 - Site-specific extractors use targeted HTML selectors first and only fall back to the generic extractor when those selectors do not produce enough usable fields.
+- Low-confidence partial results now return a manual confirmation prompt instead of quietly surfacing thin data as analysis-ready.
 - When extraction fails or looks untrustworthy, the extractor returns a structured manual-entry prompt instead of treating assumption defaults as authoritative.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
 - Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
