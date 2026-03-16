@@ -53,6 +53,11 @@ export interface AssumptionPromptGuidance {
 
 export interface ManualEntryPrompt {
   reason: string;
+  next_step: string;
+  preferred_input: "paste_listing_text";
+  required_property_facts: string[];
+  helpful_property_facts: string[];
+  optional_assumptions: string[];
   requested_property_fields: string[];
   suggested_user_prompt: string;
   follow_up_questions: string[];

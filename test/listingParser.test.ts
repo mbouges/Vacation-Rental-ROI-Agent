@@ -41,6 +41,10 @@ test("blocked site response returns structured manual-entry fallback", async () 
     assert.ok(result.manual_entry_prompt);
     assert.equal(result.field_provenance.address.status, "missing");
     assert.equal(result.field_provenance.address.source, "missing");
+    assert.equal(result.manual_entry_prompt?.preferred_input, "paste_listing_text");
+    assert.deepEqual(result.manual_entry_prompt?.required_property_facts, ["address", "price"]);
+    assert.ok(result.manual_entry_prompt?.optional_assumptions.includes("nightly_rate"));
+    assert.match(result.manual_entry_prompt?.next_step ?? "", /Paste the listing text/i);
     assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
   } finally {
     globalThis.fetch = originalFetch;
@@ -131,4 +135,27 @@ test("parseListingFromUrl uses JSON-LD as a second extraction pass", async () =>
   assert.equal(result.field_provenance.hoa_monthly.status, "missing");
   assert.equal(result.field_provenance.hoa_monthly.confidence, "none");
   assert.equal(result.manual_entry_prompt, null);
+});
+
+test("low-confidence partial extraction returns a manual review prompt", () => {
+  const result = parseListingFromText("Price: $6. 2 beds. Condo.");
+
+  assert.equal(result.price, null);
+  assert.ok(result.invalid_fields.includes("price"));
+  assert.equal(result.extraction_confidence, "low");
+  assert.ok(result.manual_entry_prompt);
+  assert.equal(result.manual_entry_prompt?.preferred_input, "paste_listing_text");
+  assert.deepEqual(result.manual_entry_prompt?.required_property_facts, ["address", "price"]);
+  assert.ok(result.manual_entry_prompt?.helpful_property_facts.includes("beds"));
+  assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
+});
+
+test("absurd bath counts are treated as invalid", () => {
+  const result = parseListingFromText(
+    "123 Beach Ave, Destin, FL 32541 listed for $485,000. 2 beds, 847 baths, 930 sqft. Condo.",
+  );
+
+  assert.equal(result.baths, null);
+  assert.ok(result.invalid_fields.includes("baths"));
+  assert.ok(result.manual_entry_prompt);
 });
