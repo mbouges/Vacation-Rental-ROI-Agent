@@ -35,6 +35,10 @@ test("blocked site response returns structured manual-entry fallback", async () 
     assert.deepEqual(result.extracted_fields, []);
     assert.equal(result.site_domain, "example.com");
     assert.ok(result.manual_entry_prompt);
+    assert.equal(result.manual_entry_prompt?.preferred_input, "paste_listing_text");
+    assert.deepEqual(result.manual_entry_prompt?.required_property_facts, ["address", "price"]);
+    assert.ok(result.manual_entry_prompt?.optional_assumptions.includes("nightly_rate"));
+    assert.match(result.manual_entry_prompt?.next_step ?? "", /Paste the listing text/i);
     assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
   } finally {
     globalThis.fetch = originalFetch;
@@ -127,6 +131,9 @@ test("low-confidence partial extraction returns a manual review prompt", () => {
   assert.ok(result.invalid_fields.includes("price"));
   assert.equal(result.extraction_confidence, "low");
   assert.ok(result.manual_entry_prompt);
+  assert.equal(result.manual_entry_prompt?.preferred_input, "paste_listing_text");
+  assert.deepEqual(result.manual_entry_prompt?.required_property_facts, ["address", "price"]);
+  assert.ok(result.manual_entry_prompt?.helpful_property_facts.includes("beds"));
   assert.equal(result.assumption_guidance.assumption_fields.suggested_defaults.nightly_rate, undefined);
 });
 

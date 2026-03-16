@@ -40,7 +40,7 @@ test("router falls back to the generic extractor when no site strategy matches",
 
   assert.equal(result.fetch_status, "error");
   assert.equal(result.site_domain, "unknown-site.test");
-  assert.equal(result.manual_entry_prompt?.reason, "The page did not produce enough reliable property details to continue automatically.");
+  assert.equal(result.manual_entry_prompt?.reason, "The listing could not be fetched reliably, so I could not extract enough trusted property facts.");
 });
 
 test("router selects a matching site-specific extractor before the generic fallback", async () => {
@@ -53,3 +53,4 @@ test("router selects a matching site-specific extractor before the generic fallb
   assert.equal(result.site_domain, "example.com");
   assert.equal(result.parse_status, "partial");
 });
+
