@@ -133,3 +133,18 @@ test("ScenarioEngine supports explicit management percent changes", () => {
   assert.equal(followup.updated_assumptions.occupancyRate, 0.62);
 });
 
+test("ScenarioEngine supports assignment-style followup syntax", () => {
+  const { engine } = createTestEngine();
+  const analysis = calculateRoi(property, assumptions);
+  const record = engine.save(property, assumptions, analysis);
+
+  const followup = engine.answerFollowup(
+    record.id,
+    "Recalculate ROI with management_rate = 0 and occupancy_rate = 0.65, all else unchanged.",
+  );
+
+  assert.equal(followup.updated_assumptions.managementRate, 0);
+  assert.equal(followup.updated_assumptions.occupancyRate, 0.65);
+  assert.equal(followup.updated_assumptions.nightlyRate, assumptions.nightlyRate);
+});
+
