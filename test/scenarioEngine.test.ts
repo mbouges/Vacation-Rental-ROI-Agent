@@ -106,3 +106,30 @@ test("ScenarioEngine updates nightly rate from dollar question", () => {
   assert.equal(followup.updated_assumptions.nightlyRate, 200);
 });
 
+test("ScenarioEngine supports compound occupancy and self-management updates", () => {
+  const { engine } = createTestEngine();
+  const analysis = calculateRoi(property, assumptions);
+  const record = engine.save(property, assumptions, analysis);
+
+  const followup = engine.answerFollowup(
+    record.id,
+    "What if I self-manage the property (0% management fee) and increase occupancy to 65% while keeping nightly rate the same?",
+  );
+
+  assert.equal(followup.updated_assumptions.managementRate, 0);
+  assert.equal(followup.updated_assumptions.occupancyRate, 0.65);
+  assert.equal(followup.updated_assumptions.nightlyRate, assumptions.nightlyRate);
+  assert.ok(followup.analysis.gross_revenue > analysis.gross_revenue);
+});
+
+test("ScenarioEngine supports explicit management percent changes", () => {
+  const { engine } = createTestEngine();
+  const analysis = calculateRoi(property, assumptions);
+  const record = engine.save(property, assumptions, analysis);
+
+  const followup = engine.answerFollowup(record.id, "What if management drops to 10% and occupancy is 62%?");
+
+  assert.equal(followup.updated_assumptions.managementRate, 0.1);
+  assert.equal(followup.updated_assumptions.occupancyRate, 0.62);
+});
+

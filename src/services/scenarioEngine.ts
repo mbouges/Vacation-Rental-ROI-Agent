@@ -69,34 +69,50 @@ export class ScenarioEngine {
     question: string,
   ): InvestmentAssumptions {
     const normalizedQuestion = question.toLowerCase();
-    const percentValue = this.extractPercent(question);
-    const dollarValue = this.extractDollar(question);
+    let updated = { ...assumptions };
 
-    if (normalizedQuestion.includes("occupancy")) {
-      if ((normalizedQuestion.includes("drop by") || normalizedQuestion.includes("drops by")) && percentValue != null) {
-        const current = normalizeOccupancyRate(assumptions.occupancyRate);
-        return { ...assumptions, occupancyRate: Math.max(0, current * (1 - percentValue)) };
-      }
-
-      if (percentValue != null) {
-        return { ...assumptions, occupancyRate: percentValue };
-      }
+    const occupancyRate = this.extractOccupancyRate(normalizedQuestion, assumptions);
+    if (occupancyRate != null) {
+      updated.occupancyRate = occupancyRate;
     }
 
-    if ((normalizedQuestion.includes("nightly") || normalizedQuestion.includes("rate")) && dollarValue != null) {
-      return { ...assumptions, nightlyRate: dollarValue };
+    const managementRate = this.extractManagementRate(normalizedQuestion);
+    if (managementRate != null) {
+      updated.managementRate = managementRate;
     }
 
-    if (normalizedQuestion.includes("down") && normalizedQuestion.includes("payment") && percentValue != null) {
-      return { ...assumptions, downPaymentPercent: percentValue };
+    const nightlyRate = this.extractNightlyRate(question, normalizedQuestion);
+    if (nightlyRate != null) {
+      updated.nightlyRate = nightlyRate;
     }
 
-    return assumptions;
+    const downPaymentPercent = this.extractDownPaymentPercent(question, normalizedQuestion);
+    if (downPaymentPercent != null) {
+      updated.downPaymentPercent = downPaymentPercent;
+    }
+
+    return updated;
   }
 
   private extractPercent(question: string): number | null {
     const match = question.match(/(\d+(?:\.\d+)?)\s*%/);
     return match?.[1] ? normalizePercent(Number(match[1])) : null;
+  }
+
+  private extractPercentNearKeyword(question: string, keywordPattern: RegExp): number | null {
+    const patterns = [
+      new RegExp(`${keywordPattern.source}[^\\d%]{0,40}(\\d+(?:\\.\\d+)?)\\s*%`, "i"),
+      new RegExp(`(\\d+(?:\\.\\d+)?)\\s*%[^\\n.]{0,40}${keywordPattern.source}`, "i"),
+    ];
+
+    for (const pattern of patterns) {
+      const match = question.match(pattern);
+      if (match?.[1]) {
+        return normalizePercent(Number(match[1]));
+      }
+    }
+
+    return null;
   }
 
   private extractDollar(question: string): number | null {
@@ -106,5 +122,77 @@ export class ScenarioEngine {
     }
 
     return Number(match[1].replace(/,/g, ""));
+  }
+
+  private extractOccupancyRate(question: string, assumptions: InvestmentAssumptions): number | null {
+    if (!question.includes("occupancy")) {
+      return null;
+    }
+
+    const dropByMatch = question.match(/occupancy[\w\s]{0,20}(?:drops?|drop)\s+by\s+(\d+(?:\.\d+)?)\s*%/i);
+    if (dropByMatch?.[1]) {
+      const current = normalizeOccupancyRate(assumptions.occupancyRate);
+      return Math.max(0, current * (1 - normalizePercent(Number(dropByMatch[1]))));
+    }
+
+    const dropToMatch = question.match(/occupancy[\w\s]{0,20}(?:drops?|drop)\s+to\s+(\d+(?:\.\d+)?)\s*%/i);
+    if (dropToMatch?.[1]) {
+      return normalizePercent(Number(dropToMatch[1]));
+    }
+
+    const explicitToMatch = question.match(/occupancy[\w\s]{0,20}(?:to|at|is|becomes?)\s+(\d+(?:\.\d+)?)\s*%/i);
+    if (explicitToMatch?.[1]) {
+      return normalizePercent(Number(explicitToMatch[1]));
+    }
+
+    const nearKeyword = this.extractPercentNearKeyword(question, /occupancy/);
+    if (nearKeyword != null) {
+      return nearKeyword;
+    }
+
+    return null;
+  }
+
+  private extractManagementRate(question: string): number | null {
+    if (!(question.includes("manage") || question.includes("management"))) {
+      return null;
+    }
+
+    if (/\bself-manage(?:d|ment)?\b/i.test(question) || /\b0\s*%\s*management\b/i.test(question)) {
+      return 0;
+    }
+
+    const directMatch = question.match(/management[\w\s]{0,20}(?:to|at|is|becomes?|drops?\s+to)\s+(\d+(?:\.\d+)?)\s*%/i);
+    if (directMatch?.[1]) {
+      return normalizePercent(Number(directMatch[1]));
+    }
+
+    const percentNearManagement = this.extractPercentNearKeyword(question, /management|manage(?:ment|d)?/);
+    if (percentNearManagement != null) {
+      return percentNearManagement;
+    }
+
+    return null;
+  }
+
+  private extractNightlyRate(question: string, normalizedQuestion: string): number | null {
+    const dollarValue = this.extractDollar(question);
+    if (dollarValue == null) {
+      return null;
+    }
+
+    if (normalizedQuestion.includes("nightly") || normalizedQuestion.includes("nightly rate")) {
+      return dollarValue;
+    }
+
+    return null;
+  }
+
+  private extractDownPaymentPercent(question: string, normalizedQuestion: string): number | null {
+    if (!(normalizedQuestion.includes("down") && normalizedQuestion.includes("payment"))) {
+      return null;
+    }
+
+    return this.extractPercent(question);
   }
 }
