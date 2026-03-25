@@ -71,22 +71,26 @@ export class ScenarioEngine {
     const normalizedQuestion = question.toLowerCase();
     let updated = { ...assumptions };
 
-    const occupancyRate = this.extractOccupancyRate(normalizedQuestion, assumptions);
+    const assignmentOccupancyRate = this.extractAssignmentRate(normalizedQuestion, "occupancy_rate");
+    const occupancyRate = assignmentOccupancyRate ?? this.extractOccupancyRate(normalizedQuestion, assumptions);
     if (occupancyRate != null) {
       updated.occupancyRate = occupancyRate;
     }
 
-    const managementRate = this.extractManagementRate(normalizedQuestion);
+    const assignmentManagementRate = this.extractAssignmentRate(normalizedQuestion, "management_rate");
+    const managementRate = assignmentManagementRate ?? this.extractManagementRate(normalizedQuestion);
     if (managementRate != null) {
       updated.managementRate = managementRate;
     }
 
-    const nightlyRate = this.extractNightlyRate(question, normalizedQuestion);
+    const assignmentNightlyRate = this.extractAssignmentNumber(normalizedQuestion, "nightly_rate");
+    const nightlyRate = assignmentNightlyRate ?? this.extractNightlyRate(question, normalizedQuestion);
     if (nightlyRate != null) {
       updated.nightlyRate = nightlyRate;
     }
 
-    const downPaymentPercent = this.extractDownPaymentPercent(question, normalizedQuestion);
+    const assignmentDownPaymentPercent = this.extractAssignmentRate(normalizedQuestion, "down_payment_percent");
+    const downPaymentPercent = assignmentDownPaymentPercent ?? this.extractDownPaymentPercent(question, normalizedQuestion);
     if (downPaymentPercent != null) {
       updated.downPaymentPercent = downPaymentPercent;
     }
@@ -122,6 +126,21 @@ export class ScenarioEngine {
     }
 
     return Number(match[1].replace(/,/g, ""));
+  }
+
+  private extractAssignmentNumber(question: string, key: string): number | null {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = question.match(new RegExp(`${escapedKey}\\s*=\\s*(\\d+(?:\\.\\d+)?)`, "i"));
+    if (!match?.[1]) {
+      return null;
+    }
+
+    return Number(match[1]);
+  }
+
+  private extractAssignmentRate(question: string, key: string): number | null {
+    const value = this.extractAssignmentNumber(question, key);
+    return value == null ? null : normalizePercent(value);
   }
 
   private extractOccupancyRate(question: string, assumptions: InvestmentAssumptions): number | null {
