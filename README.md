@@ -80,8 +80,14 @@ Railway deployment is configured with [railway.json](/C:/Users/mboug/Projects/Pe
 - start command: `node dist/server.js`
 - MCP endpoint: `/mcp`
 - health check endpoint: `/health`
+- OpenAPI document: `/openapi.json`
+- REST endpoints:
+  - `/api/extract-listing`
+  - `/api/analyze-property`
+  - `/api/answer-followup`
 
 When `PORT` is set, the server starts in HTTP mode automatically. Without `PORT`, it defaults to stdio for local MCP use.
+The same HTTP server now also exposes a thin REST/OpenAPI wrapper for Custom GPT Actions or other non-MCP clients.
 
 ## Recommended user workflow
 
@@ -181,6 +187,17 @@ Example:
 ```
 
 Supports common occupancy, nightly-rate, and down-payment follow-up scenarios. Analyses are persisted locally, so follow-ups can now load prior records across sessions.
+
+## REST API
+
+For non-MCP clients, the server also exposes:
+
+- `POST /api/extract-listing`
+- `POST /api/analyze-property`
+- `POST /api/answer-followup`
+- `GET /openapi.json`
+
+These routes reuse the same underlying business logic as the MCP tools and are intended as a fallback integration path for OpenAPI-based clients.
 
 ## Local scripts
 
