@@ -2,32 +2,47 @@
 
 ## Project
 
-Vacation Rental ROI MCP server and ROI calculator.
+Vacation Rental ROI Agent
 
-Current branch when this handoff was written:
-- `codex/field-provenance`
+This repo is an MVP backend and GPT integration foundation for analyzing short-term rental deals.
 
-Current commit when this handoff was written:
-- `bc1e1ba`
+## Current status
 
-## Goal
+The project is in a strong MVP demo-ready state.
 
-This project is an MVP backend for analyzing vacation-rental listings, collecting missing assumptions, computing ROI metrics, and answering follow-up scenario questions through MCP tools.
+Implemented:
+- MCP server
+- public Railway deployment
+- REST/OpenAPI fallback API
+- Custom GPT action integration path
+- listing extraction
+- extraction diagnostics and fallback prompts
+- persistent ROI analyses
+- follow-up scenario analysis
+- conversational ROI explanations
+- regression test coverage
 
-Primary long-term target from [PROJECT_SPEC.md](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/PROJECT_SPEC.md):
-- ChatGPT App / MCP-based vacation rental investment assistant
+Live production base URL:
+- `https://vacation-rental-roi-agent-production.up.railway.app`
 
-## Implemented
+Important live endpoints:
+- `/health`
+- `/mcp`
+- `/openapi.json`
+- `/api/extract-listing`
+- `/api/analyze-property`
+- `/api/answer-followup`
 
-- MCP tools:
-  - `extract_listing`
-  - `analyze_property`
-  - `answer_followup`
-- Deterministic ROI calculations in code
-- Conversational plain-English analysis explanations
-- Follow-up scenario analysis
-- Persistent saved analyses across sessions
-- Assumption guidance and suggested defaults
+## Key completed capabilities
+
+### Extraction
+
+- Raw pasted listing text extraction
+- Generic URL extraction
+- Strategy-based extractor architecture
+- Site-specific extractors for:
+  - `beach-homes.com`
+  - `condoinvestment.com`
 - Extraction diagnostics:
   - `extracted_fields`
   - `missing_fields`
@@ -37,13 +52,44 @@ Primary long-term target from [PROJECT_SPEC.md](/C:/Users/mboug/Projects/Persona
   - `extraction_confidence`
   - `site_domain`
   - `field_provenance`
-- First-class fallback workflow for blocked/low-confidence extraction
-- Strategy-based extraction architecture
-- Site-specific extractors for:
-  - `beach-homes.com`
-  - `condoinvestment.com`
-- Fixture-based extraction regression tests
-- Railway deployment configuration
+- Structured fallback prompts for blocked or low-confidence extraction
+
+### Analysis
+
+- Deterministic ROI calculator in code
+- Conversational explanation layer
+- Persistent `analysis_id` storage across sessions
+- Follow-up scenario engine
+
+### Follow-up handling
+
+Currently supports:
+- occupancy changes
+- nightly rate changes
+- down payment changes
+- management rate changes
+- natural-language multi-change follow-ups
+- assignment-style follow-ups like:
+  - `management_rate = 0`
+  - `occupancy_rate = 0.65`
+
+### GPT / API integration
+
+- Railway deployment works
+- MCP endpoint works remotely
+- OpenAPI import works for GPT Actions
+- GPT-side action flow has been tested end to end
+
+## Recent important fixes
+
+Recent work after the original handoff:
+- Added Railway HTTP deployment mode with `/mcp` and `/health`
+- Added REST/OpenAPI wrapper
+- Tightened OpenAPI document for easier Actions import
+- Fixed HOA extraction for text like `$450/month HOA`
+- Improved bedroom extraction for text like `2-bedroom`
+- Fixed compound follow-up parsing
+- Added assignment-style follow-up parsing for GPT-generated follow-up syntax
 
 ## Important files
 
@@ -51,6 +97,7 @@ Primary long-term target from [PROJECT_SPEC.md](/C:/Users/mboug/Projects/Persona
 - [PROJECT_SPEC.md](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/PROJECT_SPEC.md)
 - [src/server.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/server.ts)
 - [src/createMcpServer.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/createMcpServer.ts)
+- [src/httpApi.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/httpApi.ts)
 - [src/services/listingParser.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/services/listingParser.ts)
 - [src/services/listingExtraction/core.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/services/listingExtraction/core.ts)
 - [src/services/scenarioEngine.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/services/scenarioEngine.ts)
@@ -58,50 +105,47 @@ Primary long-term target from [PROJECT_SPEC.md](/C:/Users/mboug/Projects/Persona
 - [src/services/analysisStore.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/services/analysisStore.ts)
 - [railway.json](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/railway.json)
 
-## Current architecture
+## Architecture
+
+### MCP path
 
 - [src/createMcpServer.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/createMcpServer.ts)
-  - registers all MCP tools
-  - shared entrypoint for stdio and HTTP modes
+  - registers MCP tools
 
 - [src/server.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/server.ts)
-  - starts stdio mode by default for local MCP use
-  - starts HTTP mode automatically when `PORT` is set
-  - exposes:
-    - `/mcp`
-    - `/health`
+  - stdio mode for local use
+  - HTTP mode when `PORT` is set
+  - exposes `/mcp` and `/health`
+
+### REST/OpenAPI path
+
+- [src/httpApi.ts](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/httpApi.ts)
+  - `GET /openapi.json`
+  - `POST /api/extract-listing`
+  - `POST /api/analyze-property`
+  - `POST /api/answer-followup`
+
+### Extraction path
 
 - [src/services/listingExtraction](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/src/services/listingExtraction)
-  - domain router
-  - generic extractor
-  - site-specific extractors
-  - validation / fallback / provenance logic
+  - generic and site-specific extraction
+  - validation
+  - confidence
+  - field provenance
+  - fallback prompting
 
-## Output behavior to know
+## GPT configuration state
 
-`extract_listing` may return:
-- reliable extracted property facts
-- assumption guidance
-- a manual fallback prompt if extraction is blocked, failed, corrupt, or low-confidence
+A Custom GPT has already been configured and tested using:
+- the production OpenAPI document at `/openapi.json`
+- the REST action endpoints
 
-Field-level provenance now indicates whether each field came from:
-- `site_selector`
-- `structured_data`
-- `heuristic_text`
-- `missing`
-
-This is useful for future UI or LLM logic.
-
-## Deployment
-
-Railway config is already added:
-- Node runtime: `24.x` via [package.json](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/package.json)
-- build: `npm run build`
-- start: `node dist/server.js`
-- health check: `/health`
-- MCP endpoint: `/mcp`
-
-HTTP mode is selected automatically when `PORT` is present.
+The GPT instruction set was tuned to:
+- use tool outputs as source of truth
+- avoid inventing missing values
+- avoid manually correcting tool outputs
+- distinguish extracted facts from assumptions
+- use measured investment language
 
 ## Commands
 
@@ -134,28 +178,34 @@ npm run dev
 - [scripts/mcpClient.mjs](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/scripts/mcpClient.mjs)
 - [scripts/mcpWorkflow.mjs](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/scripts/mcpWorkflow.mjs)
 - [scripts/runDemoEvaluation.mjs](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/scripts/runDemoEvaluation.mjs)
+- [scripts/verifyRemoteMcp.mjs](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/scripts/verifyRemoteMcp.mjs)
 
-## Evaluation artifacts
+## Testing status
 
-See:
-- [docs](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/docs)
+Current tests pass:
+- `25/25`
 
-Notable files:
-- [docs/demo-readiness-summary-2026-03-15.md](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/docs/demo-readiness-summary-2026-03-15.md)
-- [docs/demo-readiness-evaluation-2026-03-15.csv](/C:/Users/mboug/Projects/Personal/Vacation-Rental-ROI-Agent/docs/demo-readiness-evaluation-2026-03-15.csv)
+Coverage includes:
+- ROI math
+- persistence
+- follow-up parsing
+- compound and assignment-style follow-ups
+- listing extraction regressions
+- fixture-based extraction
+- fallback prompting
 
-## Good next steps
+## Good next steps after the break
 
-- deploy the Railway service publicly and verify `/mcp` with a real MCP client
-- add field-level UI / LLM messaging using `field_provenance`
-- add more supported domains only if live evaluation volume justifies them
-- consider a ChatGPT App integration layer
-- consider market-based assumption defaults later
+- tighten API auth/security if moving beyond MVP demo use
+- improve publishing/privacy posture for broader GPT sharing
+- add more site-specific extractors only if justified by real test volume
+- improve market-based defaults later
+- consider a lightweight public landing page or docs page
 
 ## Recommended restart prompt
 
-Use this on another computer in a new Codex chat:
+Use this in a fresh Codex session:
 
 ```text
-Please read HANDOFF.md, README.md, and PROJECT_SPEC.md, then continue work on this repo from the current state. This is a vacation-rental ROI MCP server with extraction, fallback prompts, persistence, field-level provenance, and Railway deployment support already implemented.
+Please read HANDOFF.md, README.md, and PROJECT_SPEC.md, then continue from the current state. This repo now has a live Railway deployment, MCP endpoint, REST/OpenAPI fallback API, Custom GPT action integration, improved listing extraction, persistent ROI analysis, and compound follow-up support.
 ```

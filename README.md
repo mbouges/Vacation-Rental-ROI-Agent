@@ -10,6 +10,8 @@ TypeScript MCP server for analyzing vacation-rental property ROI through MCP too
 - generic URL extraction
 - site-specific extraction for `beach-homes.com` and `condoinvestment.com`
 - persisted follow-up analysis
+- public Railway deployment
+- Custom GPT / OpenAPI action integration path
 
 ### Known limitations
 
@@ -250,6 +252,9 @@ Current test coverage includes:
 - corrupted address downgrade
 - `sqft` zero treated as missing
 - tax equal to price treated as invalid
+- HOA parsing for `$450/month HOA` style text
+- bedroom parsing for `2-bedroom` style text
+- assignment-style follow-up parsing such as `management_rate = 0` and `occupancy_rate = 0.65`
 - structured assumption guidance generation
 
 ## Demo-readiness notes
@@ -275,4 +280,6 @@ Latest batch summary:
 - When extraction is blocked or low-confidence, the preferred fallback is pasted listing text.
 - If pasted listing text is not available, the smallest property fact set needed to continue is `address` plus `price`.
 - Follow-up parsing currently handles common occupancy, nightly-rate, and down-payment questions.
+- Follow-up parsing now supports both natural-language and assignment-style updates for common assumptions.
 - Analyses are stored in local JSON so `answer_followup` can load previous analyses across sessions.
+- The production deployment is live at `https://vacation-rental-roi-agent-production.up.railway.app`.
