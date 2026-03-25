@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpServer } from "./createMcpServer.js";
+import { handleApiRequest } from "./httpApi.js";
 
 type SessionContext = {
   server: McpServer;
@@ -86,6 +87,10 @@ async function startHttpServer(): Promise<void> {
         return;
       }
 
+      if (await handleApiRequest(req, res, path)) {
+        return;
+      }
+
       if (path === "/mcp") {
         await handleMcpRequest(req, res);
         return;
@@ -95,7 +100,7 @@ async function startHttpServer(): Promise<void> {
         sendJson(res, 200, {
           status: "ok",
           message: "Vacation Rental ROI Agent MCP server",
-          endpoints: ["/mcp", "/health"],
+          endpoints: ["/mcp", "/health", "/openapi.json", "/api/extract-listing", "/api/analyze-property", "/api/answer-followup"],
         });
         return;
       }
