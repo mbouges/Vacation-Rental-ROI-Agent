@@ -167,7 +167,7 @@ test("hoa extraction does not capture annual tax amount from later text", () => 
 
   assert.equal(result.address, "456 Bayfront Ave, San Diego, CA 92101");
   assert.equal(result.price, 980000);
-  assert.equal(result.beds, null);
+  assert.equal(result.beds, 2);
   assert.equal(result.baths, 2);
   assert.equal(result.sqft, 1200);
   assert.equal(result.hoa_monthly, 450);

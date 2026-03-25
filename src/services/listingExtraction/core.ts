@@ -310,7 +310,15 @@ function buildHeuristicFields(rawText: string): PartialListingFields {
   return {
     address: extractAddress(rawText),
     price: matchNumber([/(?:list price|price)[:\s]*\$([\d,]+(?:\.\d+)?)/i, /\$([\d,]+(?:\.\d+)?)/], rawText),
-    beds: matchNumber([/(?:beds?|bedrooms?)[:\s]+(\d+(?:\.\d+)?)/i, /(\d+(?:\.\d+)?)\s*(?:bed|beds|br)\b/i], rawText),
+    beds: matchNumber(
+      [
+        /(?:beds?|bedrooms?)[:\s]+(\d+(?:\.\d+)?)/i,
+        /(\d+(?:\.\d+)?)\s*(?:bed|beds|br)\b/i,
+        /(\d+(?:\.\d+)?)\s*-\s*bedroom\b/i,
+        /(\d+(?:\.\d+)?)\s*bedroom\b/i,
+      ],
+      rawText,
+    ),
     baths: matchNumber([/(?:baths?|bathrooms?)[:\s]+(\d+(?:\.\d+)?)/i, /(\d+(?:\.\d+)?)\s*(?:bath|baths|ba)\b/i], rawText),
     sqft: matchNumber([/(?:sq\.?\s*ft|sqft|square feet)[:\s]+([\d,]+)/i, /([\d,]+)\s*(?:sq\.?\s*ft|sqft|square feet)\b/i], rawText),
     hoa_monthly: extractHoaMonthly(rawText),
