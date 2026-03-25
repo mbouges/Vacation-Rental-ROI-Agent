@@ -85,6 +85,16 @@ function matchNumber(patterns: RegExp[], text: string): number | null {
   return null;
 }
 
+function extractHoaMonthly(text: string): number | null {
+  const patterns = [
+    /\$([\d,]+(?:\.\d+)?)\s*(?:\/\s*month|per month|monthly)\s*(?:hoa|hoa dues|hoa fee|hoa fees)\b/i,
+    /(?:hoa|hoa dues|hoa fee|hoa fees)\b[^$\d]{0,20}\$([\d,]+(?:\.\d+)?)\s*(?:\/\s*month|per month|monthly)?/i,
+    /(?:monthly hoa)\b[^$\d]{0,20}\$?([\d,]+(?:\.\d+)?)/i,
+  ];
+
+  return matchNumber(patterns, text);
+}
+
 function matchPropertyType(text: string): PropertyType | null {
   const normalized = text.toLowerCase();
 
@@ -303,10 +313,7 @@ function buildHeuristicFields(rawText: string): PartialListingFields {
     beds: matchNumber([/(?:beds?|bedrooms?)[:\s]+(\d+(?:\.\d+)?)/i, /(\d+(?:\.\d+)?)\s*(?:bed|beds|br)\b/i], rawText),
     baths: matchNumber([/(?:baths?|bathrooms?)[:\s]+(\d+(?:\.\d+)?)/i, /(\d+(?:\.\d+)?)\s*(?:bath|baths|ba)\b/i], rawText),
     sqft: matchNumber([/(?:sq\.?\s*ft|sqft|square feet)[:\s]+([\d,]+)/i, /([\d,]+)\s*(?:sq\.?\s*ft|sqft|square feet)\b/i], rawText),
-    hoa_monthly: matchNumber([
-      /hoa(?: dues| fee| fees)?[^$\d]*\$?([\d,]+(?:\.\d+)?)\s*(?:\/\s*month|per month|monthly)?/i,
-      /monthly hoa[^$\d]*\$?([\d,]+(?:\.\d+)?)/i,
-    ], rawText),
+    hoa_monthly: extractHoaMonthly(rawText),
     tax_annual: matchNumber([
       /(?:property )?tax(?:es)?[^$\d]*\$?([\d,]+(?:\.\d+)?)\s*(?:\/\s*year|per year|annual|yearly)?/i,
       /annual taxes?[^$\d]*\$?([\d,]+(?:\.\d+)?)/i,

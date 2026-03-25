@@ -159,3 +159,17 @@ test("absurd bath counts are treated as invalid", () => {
   assert.ok(result.invalid_fields.includes("baths"));
   assert.ok(result.manual_entry_prompt);
 });
+
+test("hoa extraction does not capture annual tax amount from later text", () => {
+  const result = parseListingFromText(
+    "Modern 2-bedroom condo located at 456 Bayfront Ave, San Diego, CA 92101. Listed at $980,000 with 1,200 sqft, 2 baths, and $450/month HOA. Estimated annual property taxes $9,500.",
+  );
+
+  assert.equal(result.address, "456 Bayfront Ave, San Diego, CA 92101");
+  assert.equal(result.price, 980000);
+  assert.equal(result.beds, null);
+  assert.equal(result.baths, 2);
+  assert.equal(result.sqft, 1200);
+  assert.equal(result.hoa_monthly, 450);
+  assert.equal(result.tax_annual, 9500);
+});
