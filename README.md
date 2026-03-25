@@ -198,6 +198,7 @@ For non-MCP clients, the server also exposes:
 - `GET /openapi.json`
 
 These routes reuse the same underlying business logic as the MCP tools and are intended as a fallback integration path for OpenAPI-based clients.
+The OpenAPI document is now tightened for easier Custom GPT Actions import, with concrete request and response schemas plus the deployed Railway production server URL.
 
 ## Local scripts
 
